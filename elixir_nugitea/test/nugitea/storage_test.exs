@@ -31,4 +31,69 @@ defmodule Nugitea.StorageTest do
 
     assert {:error, _} = Storage.init_bare("alice/dotfiles")
   end
+
+  test "branches/1, tree/3, blob/3, and files/2 with a commit", %{tmp_dir: root} do
+    # Set up a bare repository
+    assert Storage.init_bare("alice/demo") == :ok
+
+    # Create a temporary directory for git operations in tmp directory to avoid conflict
+    tmp_git_dir = Path.join(root, "tmp_git")
+    File.mkdir_p!(tmp_git_dir)
+
+    # Initialize a git repo in the temp directory and add some content
+    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
+
+    # Create a test file
+    File.write!(tmp_git_dir <> "/test.txt", "Hello, world!")
+
+    # Add and commit the file
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Initial commit"], cd: tmp_git_dir)
+
+    # Create a nested directory and file  
+    File.mkdir_p!(tmp_git_dir <> "/subdir")
+    File.write!(tmp_git_dir <> "/subdir/nested.txt", "Nested content")
+
+    # Add and commit the nested file
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Add nested file"], cd: tmp_git_dir)
+
+    # Push to the bare repo using a different approach  
+    bare_path = Path.join(root, "alice/demo.git")
+    System.cmd("git", ["remote", "add", "origin", bare_path], cd: tmp_git_dir)
+    System.cmd("git", ["push", "origin", "main"], cd: tmp_git_dir)
+
+    # Test branches/1 - should return the branch name
+    assert {:ok, branches} = Storage.branches("alice/demo")
+    assert "main" in branches
+
+    # Test files/2 - should list all files recursively 
+    assert {:ok, files} = Storage.files("alice/demo", "main")
+    assert "test.txt" in files
+    assert "subdir/nested.txt" in files
+
+    # Test tree/3 - should return the tree structure at root
+    assert {:ok, tree_entries} = Storage.tree("alice/demo", "main", "")
+    # Check that we have entries for both files
+    tree_names = Enum.map(tree_entries, & &1.name)
+    assert "test.txt" in tree_names
+    assert "subdir" in tree_names
+
+    # Test blob/3 - should return content of a specific file
+    assert {:ok, %{content: content}} = Storage.blob("alice/demo", "main", "test.txt")
+    assert content == "Hello, world!"
+
+    # Test tree/3 for nested directory
+    assert {:ok, subdir_entries} = Storage.tree("alice/demo", "main", "subdir")
+    assert length(subdir_entries) == 1
+    assert subdir_entries |> hd() |> Map.get(:name) == "nested.txt"
+
+    # Test blob/3 for nested file
+    assert {:ok, %{content: nested_content}} =
+             Storage.blob("alice/demo", "main", "subdir/nested.txt")
+
+    assert nested_content == "Nested content"
+  end
 end
