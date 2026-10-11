@@ -9,7 +9,7 @@ keep each one small enough to finish in one sitting, with a test.
 ## Test what exists
 
 - [x] Test `Nugitea.CLI.parse_duration/1` in `test/nugitea/cli_test.exs`: "30s", "5m", "2h", and errors for "", "5", "5x", "-1m".
-- [ ] Test `Nugitea.Mirror.Store` in `test/nugitea/mirror_test.exs` with a tmp state dir: `add/1` replaces an entry with the same repo and direction, and `touch/2` updates only the matching entry's `last_sync_unix`.
+- [x] Test `Nugitea.Mirror.Store` in `test/nugitea/mirror_test.exs` with a tmp state dir: `add/1` replaces an entry with the same repo and direction, and `touch/2` updates only the matching entry's `last_sync_unix`.
 - [ ] Test `Nugitea.Storage.branches/1`, `tree/3`, `blob/3` and `files/2` in `test/nugitea/storage_test.exs` against a repo made with `Storage.init_bare/1` plus one pushed commit (build it with `git` in the tmp dir and push to the bare repo's path).
 - [ ] Test the GraphQL `object(expression:)` field for a tree and for a blob in `test/nugitea/graphql_test.exs`, using a real repo as in the previous task.
 - [ ] Test `Nugitea.Router` with `Plug.Test` in `test/nugitea/router_test.exs`: `info/refs` with a bad `service` is 400; an unknown repo is 404; a known repo's `info/refs` is 200 with content type `application/x-git-upload-pack-advertisement`.
