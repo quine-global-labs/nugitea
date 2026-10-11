@@ -6,14 +6,17 @@ defmodule Nugitea.Application do
   def start(_type, _args) do
     role = Application.fetch_env!(:nugitea, :role)
 
-    if role == :app do
-      storage = Application.fetch_env!(:nugitea, :storage_node)
+    if storage = Application.fetch_env!(:nugitea, :storage_node) do
       Node.connect(storage) || raise "can't reach storage node #{storage}"
     end
 
     children =
-      if role in [:all, :app] do
-        [{Bandit, plug: Nugitea.Router, port: Application.fetch_env!(:nugitea, :http_port)}]
+      if role in [:all, :app] and Application.fetch_env!(:nugitea, :serve) do
+        [
+          {Bandit, plug: Nugitea.Router, port: Application.fetch_env!(:nugitea, :http_port)},
+          Nugitea.SSH,
+          Nugitea.Mirror.Scheduler
+        ]
       else
         []
       end
