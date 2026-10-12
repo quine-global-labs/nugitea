@@ -328,6 +328,22 @@ defmodule Nugitea.Accounts.Directory do
     end
   end
 
+  @doc "`add_team/5` by full path: `acme/devs` is `devs` in org `acme`."
+  def add_team_at(dir, path, slug, parent, visibility) do
+    case String.split(path, "/") |> Enum.split(-1) do
+      {[], [_]} ->
+        {:error, "team #{inspect(path)} needs an org"}
+
+      {owners, [_]} ->
+        o = Enum.join(owners, "/")
+
+        case resolve(dir, o) do
+          nil -> {:error, "no org #{inspect(o)}"}
+          org -> add_team(dir, org, slug, parent, visibility)
+        end
+    end
+  end
+
   def add_custom_role(dir, org, name, base, permissions) do
     with {:ok, _} <- fetch_org(dir, org),
          :ok <- Names.validate(name),

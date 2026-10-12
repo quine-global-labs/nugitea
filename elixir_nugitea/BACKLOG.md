@@ -20,7 +20,7 @@ keep each one small enough to finish in one sitting, with a test.
 - [!] Add `mix nugitea mirror list`, printing `direction repo url interval_seconds` per mirror, with a test of the output (use `ExUnit.CaptureIO`).
 - [!] Add `Nugitea.Mirror.remove(repo, direction)`: removes the git remote and the mirrors.json entry; plus `mix nugitea mirror remove REPO pull|push`. Test it.
 - [!] Add `Nugitea.Accounts.Directory.delete_repo(dir, repo_id)` (also dropping grants on that repo), and `mix nugitea repo delete PATH`, which deletes the bare repo on the storage tier through a new `Storage.delete/1` and `Client.delete/1`. Test the directory part and the storage part.
-- [ ] Add `mix nugitea team create ORG SLUG` and `mix nugitea team add-member ORG/SLUG USER`, using the existing `Directory.add_team/5` and `set_team_member/4`. Test them.
+- [x] Add `mix nugitea team create ORG SLUG` and `mix nugitea team add-member ORG/SLUG USER`, using the existing `Directory.add_team/5` and `set_team_member/4`. Test them.
 - [ ] Add `mix nugitea org add-member ORG USER [--role member|owner|billing_manager]`, using `Directory.set_org_member/4`. Test it.
 - [ ] Add `mix nugitea grant USER|ORG/TEAM REPO_OR_ORG_PATH ROLE` using `Directory.grant/4`. Test it.
 

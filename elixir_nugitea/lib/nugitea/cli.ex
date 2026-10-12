@@ -8,6 +8,8 @@ defmodule Nugitea.CLI do
       org list
       repo create PATH [--visibility V]       PATH is `owner/name` or `org/sub/name`
       repo list
+      team create ORG SLUG                    ORG is `org` or `parent/child`
+      team add-member ORG/SLUG USER           USER is a login
       mirror add-pull|add-push [--interval 5m] REPO URL
       graphql-schema                          print the GraphQL schema (SDL)
 
@@ -76,6 +78,35 @@ defmodule Nugitea.CLI do
          :ok <- Client.init_bare(canonical),
          {:ok, _} <- Accounts.Store.update(state, &D.add_repo_at(&1, canonical, vis)) do
       IO.puts(canonical)
+    end
+  end
+
+  defp run(["team", "create", org_path, slug], opts) do
+    start()
+
+    with {:ok, vis} <- visibility(opts),
+         {:ok, id} <-
+           Accounts.Store.update(
+             Accounts.state_dir(),
+             &D.add_team_at(&1, org_path, slug, nil, vis)
+           ) do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+      IO.puts(D.path(dir, id))
+    end
+  end
+
+  defp run(["team", "add-member", team_path, user_login], _opts) do
+    start()
+
+    with {:ok, dir} <- Accounts.Store.load(Accounts.state_dir()),
+         team_id <- D.resolve(dir, team_path),
+         user_id <- D.resolve(dir, user_login),
+         :ok <-
+           Accounts.Store.update(
+             Accounts.state_dir(),
+             &D.set_team_member(&1, team_id, user_id, :member)
+           ) do
+      :ok
     end
   end
 
