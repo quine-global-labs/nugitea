@@ -6,6 +6,7 @@ defmodule Nugitea.CLI do
       user create LOGIN | user list
       org create PATH [--visibility V]        PATH is `org` or `parent/child`
       org list
+      org add-member ORG USER [--role member|owner|billing_manager]
       repo create PATH [--visibility V]       PATH is `owner/name` or `org/sub/name`
       repo list
       team create ORG SLUG                    ORG is `org` or `parent/child`
@@ -21,7 +22,13 @@ defmodule Nugitea.CLI do
   alias Nugitea.Accounts.Directory, as: D
   alias Nugitea.Storage.Client
 
-  @switches [visibility: :string, interval: :string, state_dir: :string, storage_node: :string]
+  @switches [
+    visibility: :string,
+    interval: :string,
+    state_dir: :string,
+    storage_node: :string,
+    role: :string
+  ]
 
   def main(argv) do
     {opts, args} = OptionParser.parse!(argv, strict: @switches)
@@ -61,6 +68,22 @@ defmodule Nugitea.CLI do
          {:ok, id} <- Accounts.Store.update(Accounts.state_dir(), &D.add_org_at(&1, path, vis)) do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
       IO.puts(D.path(dir, id))
+    end
+  end
+
+  defp run(["org", "add-member", org_path, user_login], opts) do
+    start()
+
+    with {:ok, role} <- role(opts),
+         {:ok, dir} <- Accounts.Store.load(Accounts.state_dir()),
+         org_id <- D.resolve(dir, org_path),
+         user_id <- D.resolve(dir, user_login),
+         :ok <-
+           Accounts.Store.update(
+             Accounts.state_dir(),
+             &D.set_org_member(&1, org_id, user_id, role)
+           ) do
+      :ok
     end
   end
 
@@ -148,6 +171,13 @@ defmodule Nugitea.CLI do
     end
 
     {:ok, _} = Application.ensure_all_started(:nugitea)
+  end
+
+  def role(opts) do
+    case opts[:role] || "member" do
+      r when r in ~w(member owner billing_manager) -> {:ok, String.to_existing_atom(r)}
+      r -> {:error, "invalid role #{inspect(r)}: expected member, owner, or billing_manager"}
+    end
   end
 
   defp visibility(opts) do
