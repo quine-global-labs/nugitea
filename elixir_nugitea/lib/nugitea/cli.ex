@@ -11,6 +11,7 @@ defmodule Nugitea.CLI do
       repo list
       team create ORG SLUG                    ORG is `org` or `parent/child`
       team add-member ORG/SLUG USER           USER is a login
+      grant USER|ORG/TEAM REPO_OR_ORG_PATH ROLE
       mirror add-pull|add-push [--interval 5m] REPO URL
       graphql-schema                          print the GraphQL schema (SDL)
 
@@ -145,6 +146,24 @@ defmodule Nugitea.CLI do
       end
 
     paths |> Enum.sort() |> Enum.each(&IO.puts/1)
+  end
+
+  defp run(["grant", principal, resource, role], _opts) do
+    start()
+
+    with {:ok, dir} <- Accounts.Store.load(Accounts.state_dir()),
+         principal_id <- D.resolve(dir, principal),
+         resource_id <- D.resolve(dir, resource) do
+      # Use Directory.grant to implement the command
+      case D.grant(dir, {:user, principal_id}, {:repo, resource_id}, role) do
+        {:ok, new_dir} ->
+          Accounts.Store.update(Accounts.state_dir(), fn _ -> new_dir end)
+          :ok
+
+        {:error, reason} ->
+          {:error, "grant failed: #{reason}"}
+      end
+    end
   end
 
   defp run(["mirror", direction, repo, url], opts) when direction in ["add-pull", "add-push"] do

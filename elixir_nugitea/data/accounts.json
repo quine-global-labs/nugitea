@@ -1,0 +1,20 @@
+{
+  "blocks": [],
+  "next_id": 1,
+  "repos": {},
+  "accounts": {
+    "1": {
+      "id": 1,
+      "kind": "user",
+      "visibility": "public",
+      "managed_by": null,
+      "slug": "alice"
+    }
+  },
+  "custom_roles": {},
+  "enterprise_roles": {},
+  "enterprises": {},
+  "grants": [],
+  "org_members": {},
+  "teams": {}
+}
