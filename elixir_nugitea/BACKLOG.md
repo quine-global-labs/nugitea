@@ -29,7 +29,7 @@ keep each one small enough to finish in one sitting, with a test.
 - [!] Add `Nugitea.Auth.Directory`, an authorizer (`@behaviour Nugitea.Auth`) that loads accounts.json and allows a pull when `Directory.effective_role(dir, nil, repo_id)` is not nil (anonymous user) and denies every push for now. Test it with public and private repos. Don't make it the default yet.
 - [x] Give `Nugitea.Auth` callbacks a user argument (`allow_pull?(user, repo)`, `allow_push?(user, repo)`, user is a user id or nil) and update every caller and `AllowAll`. Callers pass nil for now. Tests still pass.
 - [x] Add access tokens: `Nugitea.Accounts.Tokens` storing SHA-256 hashes of random tokens in tokens.json in the state dir, mapped to user ids; `mix nugitea token create USER` prints a new token. Test create and lookup.
-- [ ] In `Nugitea.Router`, read HTTP basic auth (any username, token as password), look up the user with `Tokens`, and pass the user id to `Nugitea.Auth`. Unknown tokens get 401. Test with `Plug.Test`.
+- [!] In `Nugitea.Router`, read HTTP basic auth (any username, token as password), look up the user with `Tokens`, and pass the user id to `Nugitea.Auth`. Unknown tokens get 401. Test with `Plug.Test`.
 - [ ] Add SSH keys: `mix nugitea user add-key USER "ssh-ed25519 AAAA..."` stores the key in accounts state; `Nugitea.SSH.Keys.is_auth_key/3` accepts only stored keys, and the channel passes the key's user to `Nugitea.Auth`. Test the key store.
 - [ ] Make `Nugitea.Auth.Directory` the default authorizer, allowing pushes when the user's effective role is `:write` or higher. Update tests.
 
