@@ -42,5 +42,5 @@ keep each one small enough to finish in one sitting, with a test.
 ## Webhooks
 
 - [x] Add `Nugitea.Webhooks.Store` (webhooks.json in the state dir: repo path, URL, secret) and `mix nugitea webhook add REPO URL [--secret S]` / `webhook list`. Test the store.
-- [ ] Make the `post-receive` hook report pushed refs to the app tier: the hook script passes its stdin to `Nugitea.Storage` (design the smallest way), which notifies the app node. Test that a push records the ref updates.
+- [!] Make the `post-receive` hook report pushed refs to the app tier: the hook script passes its stdin to `Nugitea.Storage` (design the smallest way), which notifies the app node. Test that a push records the ref updates.
 - [ ] Deliver webhooks: on a push, POST a JSON payload (repo, ref, before, after) to each webhook URL with an `X-Nugitea-Signature` HMAC-SHA256 header when a secret is set, retrying 3 times. Test with a local Bandit server.
