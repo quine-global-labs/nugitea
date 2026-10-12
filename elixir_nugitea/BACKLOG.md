@@ -47,5 +47,5 @@ keep each one small enough to finish in one sitting, with a test.
 
 ## Picked by the agent from Gitea
 
-- [ ] Add support for repository topics in nugitea by implementing `mix nugitea repo set-topics PATH "topic1 topic2"` CLI command, supporting repository-level topics stored in accounts.json (following the pattern of existing features like description and archived status), with a corresponding HTTP API endpoint to retrieve topics using GET /repos/{owner}/{repo}/topics, and related tests for both command-line functionality and API retrieval.
+- [!] Add support for repository topics in nugitea by implementing `mix nugitea repo set-topics PATH "topic1 topic2"` CLI command, supporting repository-level topics stored in accounts.json (following the pattern of existing features like description and archived status), with a corresponding HTTP API endpoint to retrieve topics using GET /repos/{owner}/{repo}/topics, and related tests for both command-line functionality and API retrieval.
 - [ ] Add a GET /repos/:owner/:repo endpoint in Nugitea.Router that returns basic repository statistics including commit count, size, and git metadata by calling into the storage tier to gather this information. This should be a simple one-file addition with tests and should not require new dependencies or schema changes, keeping it within the existing pattern of the codebase.
