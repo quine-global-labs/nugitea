@@ -36,7 +36,7 @@ keep each one small enough to finish in one sitting, with a test.
 ## Repos
 
 - [!] Add a `description` to repos in `Directory` (default ""), saved in accounts.json, settable with `mix nugitea repo set-description PATH TEXT`. Test it.
-- [ ] Add archived repos: `Directory.set_archived(dir, repo_id, bool)`, `mix nugitea repo archive PATH`; `Nugitea.Auth.Directory` denies pushes to archived repos. Test it.
+- [!] Add archived repos: `Directory.set_archived(dir, repo_id, bool)`, `mix nugitea repo archive PATH`; `Nugitea.Auth.Directory` denies pushes to archived repos. Test it.
 - [ ] Add a default branch per repo: `mix nugitea repo set-default-branch PATH BRANCH` runs `git symbolic-ref HEAD refs/heads/BRANCH` on the storage tier. Test it.
 
 ## Webhooks
