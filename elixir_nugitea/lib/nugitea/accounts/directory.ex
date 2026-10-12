@@ -48,7 +48,9 @@ defmodule Nugitea.Accounts.Directory do
             blocks: MapSet.new(),
             # %{principal: {:user | :team, id}, resource: {:org | :repo, id},
             #   role: role | {:custom, id}}
-            grants: []
+            grants: [],
+            # user_id -> [key_info] 
+            user_keys: %{}
 
   def roles, do: @roles
   def visibilities, do: @visibilities
@@ -82,6 +84,33 @@ defmodule Nugitea.Accounts.Directory do
   defp max_role(a, b), do: if(rank(@roles, a) >= rank(@roles, b), do: a, else: b)
   defp more_visible?(a, b), do: rank(@visibilities, a) > rank(@visibilities, b)
   defp member_role?(role), do: role in [:member, :owner]
+
+  @doc "Get keys for a user by ID"
+  def get_user_keys(dir, user_id) do
+    dir.user_keys[user_id]
+  end
+
+  @doc "Add an SSH key for a user"
+  def add_user_key(dir, user_id, key) do
+    # Check that the user exists
+    case Map.get(dir.accounts, user_id) do
+      nil ->
+        {:error, "user not found"}
+
+      %{kind: :user} ->
+        keys = dir.user_keys[user_id] || []
+        # Avoid adding duplicate keys
+        if Enum.any?(keys, &(&1.key == key)) do
+          {:ok, dir}
+        else
+          updated_user_keys = Map.put(dir.user_keys, user_id, keys ++ [%{key: key}])
+          {:ok, %{dir | user_keys: updated_user_keys}}
+        end
+
+      _ ->
+        {:error, "not a user account"}
+    end
+  end
 
   # ---- lookups ----------------------------------------------------------
 

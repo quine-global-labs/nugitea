@@ -188,6 +188,17 @@ defmodule Nugitea.CLI do
     end
   end
 
+  defp run(["user", "add-key", user_login, key], _opts) do
+    start()
+
+    with {:ok, dir} <- Accounts.Store.load(Accounts.state_dir()),
+         user_id <- D.resolve(dir, user_login),
+         {:ok, updated_dir} <- D.add_user_key(dir, user_id, key) do
+      Accounts.Store.update(Accounts.state_dir(), fn _ -> updated_dir end)
+      IO.puts("SSH key added for #{user_login}")
+    end
+  end
+
   defp run(_args, _opts), do: {:error, "usage:\n" <> @moduledoc}
 
   # Starts the app (servers only for `serve`). Reaching a storage node on

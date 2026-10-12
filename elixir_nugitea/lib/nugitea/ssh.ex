@@ -48,9 +48,41 @@ defmodule Nugitea.SSH do
     @impl true
     def host_key(algorithm, opts), do: :ssh_file.host_key(algorithm, opts)
 
-    # No users: accept any key offered.
+    # Accept only stored keys.
     @impl true
-    def is_auth_key(_key, _user, _opts), do: true
+    def is_auth_key(key, user, _opts) do
+      case Nugitea.Accounts.Store.load(Nugitea.Accounts.state_dir()) do
+        {:ok, dir} ->
+          case Nugitea.Accounts.Directory.resolve(dir, user) do
+            nil ->
+              false
+
+            user_id ->
+              with {:ok, _key_info} <- get_user_key(dir, user_id, key) do
+                true
+              else
+                :error -> false
+              end
+          end
+
+        {:error, _reason} ->
+          false
+      end
+    end
+
+    defp get_user_key(dir, user_id, key) do
+      case Nugitea.Accounts.Directory.get_user_keys(dir, user_id) do
+        nil ->
+          :error
+
+        keys ->
+          if Enum.any?(keys, &(&1.key == key)) do
+            {:ok, List.first(Enum.filter(keys, &(&1.key == key)))}
+          else
+            :error
+          end
+      end
+    end
   end
 
   defmodule Channel do
