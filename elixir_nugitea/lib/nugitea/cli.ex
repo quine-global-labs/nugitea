@@ -9,6 +9,7 @@ defmodule Nugitea.CLI do
       org add-member ORG USER [--role member|owner|billing_manager]
       repo create PATH [--visibility V]       PATH is `owner/name` or `org/sub/name`
       repo list
+      repo set-topics PATH "topic1 topic2"
       team create ORG SLUG                    ORG is `org` or `parent/child`
       team add-member ORG/SLUG USER           USER is a login
       grant USER|ORG/TEAM REPO_OR_ORG_PATH ROLE
@@ -224,6 +225,19 @@ defmodule Nugitea.CLI do
         secret = if webhook.secret, do: " (secret: #{webhook.secret})", else: ""
         IO.puts("#{repo} -> #{webhook.url}#{secret}")
       end)
+    end
+  end
+
+  defp run(["repo", "set-topics", path, topics_str], _opts) do
+    start()
+
+    with {:ok, dir} <- Accounts.Store.load(Accounts.state_dir()),
+         repo_id <- D.resolve_repo(dir, path),
+         topics = String.split(topics_str, " ", trim: true) do
+      case Accounts.Store.update(Accounts.state_dir(), &D.set_repo_topics(&1, repo_id, topics)) do
+        {:ok, _} -> IO.puts("Topics set for #{path}")
+        {:error, reason} -> {:error, "Failed to set topics: #{reason}"}
+      end
     end
   end
 

@@ -92,7 +92,8 @@ defmodule Nugitea.Accounts.Store do
             id: &1["id"],
             owner: &1["owner"],
             slug: &1["slug"],
-            visibility: atom(&1["visibility"])
+            visibility: atom(&1["visibility"]),
+            topics: &1["topics"] || []
           }
         ),
       custom_roles: from_id(j["custom_roles"], &decode_custom_role/1),
