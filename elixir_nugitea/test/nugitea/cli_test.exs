@@ -55,7 +55,7 @@ defmodule Nugitea.CLI.Test do
       :ok
     end
 
-    test "creates a token for a user", %{tmp_dir: tmp} do
+    test "creates a token for a user" do
       # Create a user first 
       assert CLI.main(["user", "create", "testuser"]) == :ok
 

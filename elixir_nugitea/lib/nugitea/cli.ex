@@ -13,6 +13,8 @@ defmodule Nugitea.CLI do
       team add-member ORG/SLUG USER           USER is a login
       grant USER|ORG/TEAM REPO_OR_ORG_PATH ROLE
       mirror add-pull|add-push [--interval 5m] REPO URL
+      webhook add REPO URL [--secret S]
+      webhook list
       graphql-schema                          print the GraphQL schema (SDL)
       token create USER                       create a new access token for USER
 
@@ -29,7 +31,8 @@ defmodule Nugitea.CLI do
     interval: :string,
     state_dir: :string,
     storage_node: :string,
-    role: :string
+    role: :string,
+    secret: :string
   ]
 
   def main(argv) do
@@ -196,6 +199,31 @@ defmodule Nugitea.CLI do
          {:ok, updated_dir} <- D.add_user_key(dir, user_id, key) do
       Accounts.Store.update(Accounts.state_dir(), fn _ -> updated_dir end)
       IO.puts("SSH key added for #{user_login}")
+    end
+  end
+
+  defp run(["webhook", "add", repo, url], opts) do
+    start()
+
+    with secret <- opts[:secret],
+         {:ok, _} <-
+           Nugitea.Webhooks.Store.update(
+             Accounts.state_dir(),
+             &Map.put(&1, repo, %{url: url, secret: secret})
+           ) do
+      IO.puts("Webhook added for #{repo}")
+    end
+  end
+
+  defp run(["webhook", "list"], _opts) do
+    start()
+
+    with {:ok, webhooks} <- Nugitea.Webhooks.Store.load(Accounts.state_dir()) do
+      webhooks
+      |> Enum.each(fn {repo, webhook} ->
+        secret = if webhook.secret, do: " (secret: #{webhook.secret})", else: ""
+        IO.puts("#{repo} -> #{webhook.url}#{secret}")
+      end)
     end
   end
 
