@@ -14,6 +14,7 @@ defmodule Nugitea.CLI do
       grant USER|ORG/TEAM REPO_OR_ORG_PATH ROLE
       mirror add-pull|add-push [--interval 5m] REPO URL
       graphql-schema                          print the GraphQL schema (SDL)
+      token create USER                       create a new access token for USER
 
   Visibility is public (default), internal or private. `--state-dir` and
   `--storage-node` override NUGITEA_STATE_DIR and NUGITEA_STORAGE_NODE.
@@ -174,6 +175,16 @@ defmodule Nugitea.CLI do
         "add-pull" -> Nugitea.Mirror.add_pull(repo, url, seconds)
         "add-push" -> Nugitea.Mirror.add_push(repo, url, seconds)
       end
+    end
+  end
+
+  defp run(["token", "create", user_login], _opts) do
+    start()
+
+    with {:ok, dir} <- Accounts.Store.load(Accounts.state_dir()),
+         user_id <- D.resolve(dir, user_login),
+         token <- Nugitea.Accounts.Tokens.create_token(Accounts.state_dir(), user_id) do
+      IO.puts(token)
     end
   end
 

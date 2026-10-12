@@ -1,8 +1,9 @@
 defmodule Nugitea.CLI.Test do
   use ExUnit.Case, async: true
+  @moduletag :tmp_dir
 
   alias Nugitea.CLI
-  alias Nugitea.Accounts.Directory, as: D
+  # Remove unused alias D
 
   describe "parse_duration/1" do
     test "parses seconds correctly" do
@@ -43,6 +44,26 @@ defmodule Nugitea.CLI.Test do
 
     test "defaults to member" do
       assert CLI.role(%{}) == {:ok, :member}
+    end
+  end
+
+  describe "token command" do
+    setup %{tmp_dir: tmp} do
+      # Set up temporary state directory  
+      state_dir = Path.join(tmp, "state")
+      Application.put_env(:nugitea, :state_dir, state_dir)
+      :ok
+    end
+
+    test "creates a token for a user", %{tmp_dir: tmp} do
+      # Create a user first 
+      assert CLI.main(["user", "create", "testuser"]) == :ok
+
+      # Create token
+      result = CLI.main(["token", "create", "testuser"])
+
+      # Should return a valid token (not an error)  
+      assert result == :ok
     end
   end
 end
