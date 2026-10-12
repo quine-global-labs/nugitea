@@ -47,4 +47,4 @@ keep each one small enough to finish in one sitting, with a test.
 
 ## Picked by the agent from Gitea
 
-- [ ] Add support for repository topics in nugitea by implementing `mix nugitea repo set-topics PATH "topic1 topic2"` CLI command, supporting repository-level topics stored in accounts.json (following the pattern of existing features like description and archived status), with a corresponding HTTP API endpoint to retrieve topics using GET /repos/{owner}/{repo}/topics, and related tests for both command-line functionality and API retrieval.
+- [x] Add support for repository topics in nugitea by implementing `mix nugitea repo set-topics PATH "topic1 topic2"` CLI command, supporting repository-level topics stored in accounts.json (following the pattern of existing features like description and archived status), with a corresponding HTTP API endpoint to retrieve topics using GET /repos/{owner}/{repo}/topics, and related tests for both command-line functionality and API retrieval.

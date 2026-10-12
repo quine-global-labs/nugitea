@@ -141,4 +141,19 @@ defmodule Nugitea.Router do
   end
 
   defp cors(conn, _opts), do: conn
+
+  # Add topics endpoint for repository (e.g. /repos/owner/repo/topics)  
+  get "/repos/:owner/:repo/topics" do
+    with {:ok, dir} <- Accounts.Store.load(Accounts.state_dir()),
+         repo_id <- Client.resolve(dir, "#{owner}/#{repo}.git") do
+      topics = dir.repos[repo_id].topics
+
+      conn
+      |> put_resp_content_type("application/json", nil)
+      |> send_resp(200, Jason.encode!(%{topics: topics}))
+    else
+      _ ->
+        send_resp(conn, 404, "not found")
+    end
+  end
 end

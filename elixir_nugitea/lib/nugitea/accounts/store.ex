@@ -47,7 +47,7 @@ defmodule Nugitea.Accounts.Store do
         accounts: by_id(d.accounts, & &1),
         enterprises: by_id(d.enterprises, & &1),
         teams: by_id(d.teams, &%{&1 | members: by_id(&1.members, fn role -> role end)}),
-        repos: by_id(d.repos, & &1),
+        repos: by_id(d.repos, &%{&1 | topics: &1.topics}),
         custom_roles: by_id(d.custom_roles, &%{&1 | permissions: Enum.sort(&1.permissions)}),
         org_members: by_id(d.org_members, &by_id(&1, fn role -> role end)),
         enterprise_roles: by_id(d.enterprise_roles, &by_id(&1, fn role -> role end)),
@@ -92,7 +92,8 @@ defmodule Nugitea.Accounts.Store do
             id: &1["id"],
             owner: &1["owner"],
             slug: &1["slug"],
-            visibility: atom(&1["visibility"])
+            visibility: atom(&1["visibility"]),
+            topics: &1["topics"] || []
           }
         ),
       custom_roles: from_id(j["custom_roles"], &decode_custom_role/1),

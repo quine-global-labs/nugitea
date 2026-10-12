@@ -227,6 +227,20 @@ defmodule Nugitea.CLI do
     end
   end
 
+  defp run(["repo", "set-topics", path, topics], _opts) do
+    start()
+
+    with {:ok, dir} <- Accounts.Store.load(Accounts.state_dir()),
+         repo_id <- D.resolve_repo(dir, path),
+         :ok <-
+           Accounts.Store.update(
+             Accounts.state_dir(),
+             &D.set_repo_topics(&1, repo_id, String.split(topics, " "))
+           ) do
+      IO.puts("Repository topics set")
+    end
+  end
+
   defp run(_args, _opts), do: {:error, "usage:\n" <> @moduledoc}
 
   # Starts the app (servers only for `serve`). Reaching a storage node on

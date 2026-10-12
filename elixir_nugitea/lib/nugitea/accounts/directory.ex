@@ -336,8 +336,14 @@ defmodule Nugitea.Accounts.Directory do
            ) do
       {dir, id} = alloc(dir)
 
-      {:ok, put_in(dir.repos[id], %{id: id, owner: owner, slug: slug, visibility: visibility}),
-       id}
+      {:ok,
+       put_in(dir.repos[id], %{
+         id: id,
+         owner: owner,
+         slug: slug,
+         visibility: visibility,
+         topics: []
+       }), id}
     end
   end
 
@@ -354,6 +360,13 @@ defmodule Nugitea.Accounts.Directory do
           nil -> {:error, "no user or org #{inspect(o)}"}
           owner -> add_repo(dir, owner, slug, visibility)
         end
+    end
+  end
+
+  @doc "Set topics for a repository"
+  def set_repo_topics(dir, repo_id, topics) do
+    with {:ok, _} <- fetch(dir.repos, repo_id, "repo") do
+      {:ok, put_in(dir.repos[repo_id].topics, topics)}
     end
   end
 
