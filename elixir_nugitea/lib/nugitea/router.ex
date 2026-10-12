@@ -13,6 +13,8 @@ defmodule Nugitea.Router do
   """
   use Plug.Router
 
+  import Plug.Conn
+
   alias Nugitea.Accounts
   alias Nugitea.Storage.Client
 
@@ -27,6 +29,43 @@ defmodule Nugitea.Router do
   forward "/graphql",
     to: Absinthe.Plug.GraphiQL,
     init_opts: [schema: Nugitea.GraphQL.Schema, interface: :simple, json_codec: Jason]
+
+  get "/repos/:owner/:repo/permissions" do
+    # Build repo path from params like the existing routes do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+
+    if owner != nil and repo != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        repo_id ->
+          # Get the current user (nil for anonymous)
+          user = nil
+
+          # Determine effective role using Directory.effective_role/3
+          role = Nugitea.Accounts.Directory.effective_role(dir, user, repo_id)
+
+          # Map the role to permission level
+          permission =
+            case role do
+              :read -> "read"
+              :write -> "write"
+              :admin -> "admin"
+              nil -> "none"
+            end
+
+          conn
+          |> put_resp_content_type("application/json")
+          |> send_resp(200, Jason.encode!(%{permission: permission}))
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
 
   get "/*glob" do
     conn = fetch_query_params(conn)
