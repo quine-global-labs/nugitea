@@ -16,7 +16,7 @@ keep each one small enough to finish in one sitting, with a test.
 
 ## Small features
 
-- [ ] Add a `GET /healthz` route to `Nugitea.Router` that returns 200 "ok", with a test.
+- [x] Add a `GET /healthz` route to `Nugitea.Router` that returns 200 "ok", with a test.
 - [ ] Add `mix nugitea mirror list`, printing `direction repo url interval_seconds` per mirror, with a test of the output (use `ExUnit.CaptureIO`).
 - [ ] Add `Nugitea.Mirror.remove(repo, direction)`: removes the git remote and the mirrors.json entry; plus `mix nugitea mirror remove REPO pull|push`. Test it.
 - [ ] Add `Nugitea.Accounts.Directory.delete_repo(dir, repo_id)` (also dropping grants on that repo), and `mix nugitea repo delete PATH`, which deletes the bare repo on the storage tier through a new `Storage.delete/1` and `Client.delete/1`. Test the directory part and the storage part.

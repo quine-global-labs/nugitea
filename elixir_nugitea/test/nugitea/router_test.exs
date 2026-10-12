@@ -63,4 +63,12 @@ defmodule Nugitea.RouterTest do
 
     assert result.status == 200
   end
+
+  test "healthz endpoint returns 200 ok" do
+    conn = :get |> Plug.Test.conn("/healthz")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 200
+    assert result.resp_body == "ok"
+  end
 end

@@ -20,6 +20,10 @@ defmodule Nugitea.Router do
   plug :match
   plug :dispatch
 
+  get "/healthz" do
+    send_resp(conn, 200, "ok")
+  end
+
   forward "/graphql",
     to: Absinthe.Plug.GraphiQL,
     init_opts: [schema: Nugitea.GraphQL.Schema, interface: :simple, json_codec: Jason]
