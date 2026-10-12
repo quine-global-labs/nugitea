@@ -44,3 +44,7 @@ keep each one small enough to finish in one sitting, with a test.
 - [x] Add `Nugitea.Webhooks.Store` (webhooks.json in the state dir: repo path, URL, secret) and `mix nugitea webhook add REPO URL [--secret S]` / `webhook list`. Test the store.
 - [!] Make the `post-receive` hook report pushed refs to the app tier: the hook script passes its stdin to `Nugitea.Storage` (design the smallest way), which notifies the app node. Test that a push records the ref updates.
 - [!] Deliver webhooks: on a push, POST a JSON payload (repo, ref, before, after) to each webhook URL with an `X-Nugitea-Signature` HMAC-SHA256 header when a secret is set, retrying 3 times. Test with a local Bandit server.
+
+## Picked by the agent from Gitea
+
+- [ ] Add support for repository topics in nugitea by implementing `mix nugitea repo set-topics PATH "topic1 topic2"` CLI command, supporting repository-level topics stored in accounts.json (following the pattern of existing features like description and archived status), with a corresponding HTTP API endpoint to retrieve topics using GET /repos/{owner}/{repo}/topics, and related tests for both command-line functionality and API retrieval.
