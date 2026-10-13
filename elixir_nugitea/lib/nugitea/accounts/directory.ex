@@ -50,7 +50,9 @@ defmodule Nugitea.Accounts.Directory do
             #   role: role | {:custom, id}}
             grants: [],
             # user_id -> [key_info] 
-            user_keys: %{}
+            user_keys: %{},
+            # pull_requests: repo_id -> [pull_request]
+            pull_requests: %{}
 
   def roles, do: @roles
   def visibilities, do: @visibilities
@@ -692,6 +694,45 @@ defmodule Nugitea.Accounts.Directory do
     with {:ok, _} <- fetch(dir.repos, repo_id, "repo") do
       {:ok, put_in(dir.repos[repo_id].topics, topics)}
     end
+  end
+
+  @doc "Creates a pull request"
+  def create_pull_request(dir, repo_id, title, description, head_branch, base_branch, author) do
+    with {:ok, _} <- fetch(dir.repos, repo_id, "repo") do
+      # Create the PR structure
+      pr = %{
+        id: "#{repo_id}-#{DateTime.utc_now() |> DateTime.to_unix()}",
+        title: title,
+        description: description,
+        head_branch: head_branch,
+        base_branch: base_branch,
+        author: author,
+        created_at: DateTime.utc_now(),
+        updated_at: DateTime.utc_now(),
+        state: :open,
+        # We'll need to compute this based on git
+        commits_count: 0,
+        additions: 0,
+        deletions: 0
+      }
+
+      # Add PR to the repo's PR list
+      prs = Map.get(dir.pull_requests, repo_id, [])
+      updated_prs = [pr | prs]
+
+      {:ok, put_in(dir.pull_requests[repo_id], updated_prs), pr.id}
+    end
+  end
+
+  @doc "Lists pull requests for a repository"
+  def list_pull_requests(dir, repo_id) do
+    Map.get(dir.pull_requests, repo_id, [])
+  end
+
+  @doc "Gets a specific pull request by ID"
+  def get_pull_request(dir, repo_id, pr_id) do
+    prs = Map.get(dir.pull_requests, repo_id, [])
+    Enum.find(prs, &(&1.id == pr_id))
   end
 
   # ---- access -----------------------------------------------------------

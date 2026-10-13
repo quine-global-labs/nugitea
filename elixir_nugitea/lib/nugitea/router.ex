@@ -16,6 +16,7 @@ defmodule Nugitea.Router do
   import Plug.Conn
 
   alias Nugitea.Accounts
+  alias Nugitea.Accounts.Directory, as: D
   alias Nugitea.Storage.Client
 
   plug :cors
@@ -104,6 +105,7 @@ defmodule Nugitea.Router do
               size: 0,
               commit_count: 0,
               branch_count: 0,
+              pull_request_count: length(dir.pull_requests[repo_id] || []),
               permissions: %{
                 admin: role == :admin,
                 push: role == :admin || role == :write,
@@ -144,6 +146,96 @@ defmodule Nugitea.Router do
             conn
             |> put_resp_content_type("application/json")
             |> send_resp(200, Jason.encode!(repo_info.topics))
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
+  post "/repos/:owner/:repo/pulls" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+
+    if owner != nil and repo != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        repo_id ->
+          # Parse request body for PR data
+          case Plug.Conn.read_body(conn) do
+            {:ok, body, _conn} ->
+              case Jason.decode(body) do
+                {:ok, params} ->
+                  # Extract required fields from the JSON parameters
+                  title = Map.get(params, "title")
+                  description = Map.get(params, "description")
+                  head = Map.get(params, "head")
+                  base = Map.get(params, "base")
+                  # Would come from authentication system in real implementation
+                  author = nil
+
+                  # Validate required fields
+                  if title == nil or head == nil or base == nil do
+                    conn
+                    |> put_resp_content_type("application/json")
+                    |> send_resp(
+                      400,
+                      Jason.encode!(%{error: "Missing required fields: title, head, and base"})
+                    )
+                  else
+                    # Create the pull request
+                    case Accounts.Store.update(
+                           Accounts.state_dir(),
+                           &D.create_pull_request(
+                             &1,
+                             repo_id,
+                             title,
+                             description || "",
+                             head,
+                             base,
+                             author
+                           )
+                         ) do
+                      {:ok, _} ->
+                        response = %{
+                          id: "pr-#{DateTime.utc_now() |> DateTime.to_unix()}",
+                          title: title,
+                          description: description,
+                          head: %{ref: head},
+                          base: %{ref: base},
+                          user: %{login: "anonymous"},
+                          state: "open",
+                          created_at: DateTime.to_iso8601(DateTime.utc_now())
+                        }
+
+                        conn
+                        |> put_resp_content_type("application/json")
+                        |> send_resp(201, Jason.encode!(response))
+
+                      {:error, reason} ->
+                        conn
+                        |> put_resp_content_type("application/json")
+                        |> send_resp(
+                          500,
+                          Jason.encode!(%{error: "Failed to create pull request: #{reason}"})
+                        )
+                    end
+                  end
+
+                {:error, _reason} ->
+                  conn
+                  |> put_resp_content_type("application/json")
+                  |> send_resp(400, Jason.encode!(%{error: "Invalid JSON in request body"}))
+              end
+
+            {:error, reason} ->
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(500, Jason.encode!(%{error: "Failed to read request body: #{reason}"}))
           end
       end
     else
