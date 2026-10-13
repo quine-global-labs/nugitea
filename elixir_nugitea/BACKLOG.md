@@ -35,7 +35,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 
 ### Repos on the storage tier
 
-- [ ] Add `Storage.delete(path)` and `Client.delete(path)`, which remove a bare repo's directory and refuse any path outside the repo root. Test it in test/nugitea/storage_test.exs. (Storage only: no CLI or API yet.)
+- [x] Add `Storage.delete(path)` and `Client.delete(path)`, which remove a bare repo's directory and refuse any path outside the repo root. Test it in test/nugitea/storage_test.exs. (Storage only: no CLI or API yet.)
 - [ ] Add `Directory.delete_repo(dir, repo_id)`, which removes the repo, the grants on it and its pull requests. Test it.
 - [ ] Add `DELETE /api/v1/repos/:owner/:repo` (admin role required; 204) and `mix nugitea repo delete PATH`, both using `Directory.delete_repo/2` and then `Client.delete/1`. Test the API route.
 - [ ] Add `Storage.default_branch(path)` (`git symbolic-ref --short HEAD`) and `Storage.set_default_branch(path, branch)` (refusing a branch that doesn't exist), with `Client` wrappers. Test both.

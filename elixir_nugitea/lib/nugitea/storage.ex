@@ -263,5 +263,17 @@ defmodule Nugitea.Storage do
     end
   end
 
+  @doc "Delete a repository directory from disk."
+  def delete(path) do
+    with {:ok, dir} <- dir(path) do
+      if File.dir?(dir) do
+        File.rm_rf!(dir)
+        :ok
+      else
+        {:error, :not_found}
+      end
+    end
+  end
+
   defp root, do: Application.fetch_env!(:nugitea, :repo_root)
 end

@@ -32,6 +32,32 @@ defmodule Nugitea.StorageTest do
     assert {:error, _} = Storage.init_bare("alice/dotfiles")
   end
 
+  test "delete removes repository directory", %{tmp_dir: _root} do
+    # Create a repo
+    assert Storage.init_bare("alice/test") == :ok
+
+    # Verify it exists 
+    assert Storage.exists?("alice/test")
+
+    # Delete it
+    assert Storage.delete("alice/test") == :ok
+
+    # Verify it no longer exists
+    refute Storage.exists?("alice/test")
+
+    # Try to delete non-existent repo
+    assert {:error, :not_found} = Storage.delete("alice/does-not-exist")
+  end
+
+  test "delete refuses paths outside repo root", %{tmp_dir: _root} do
+    # Try to delete a path that's not under the repo root  
+    assert {:error, _} = Storage.delete("../outside")
+    assert {:error, _} = Storage.delete("/tmp/somefile")
+
+    # Test with a valid nested repo path but try to go out of bounds 
+    assert {:error, _} = Storage.delete("../../../etc/passwd")
+  end
+
   test "branches/1, tree/3, blob/3, and files/2 with a commit", %{tmp_dir: root} do
     # Set up a bare repository
     assert Storage.init_bare("alice/demo") == :ok
