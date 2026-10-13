@@ -21,7 +21,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 
 ### API foundation
 
-- [ ] Move the JSON API out of `Nugitea.Router` into a new `Nugitea.API` (`use Plug.Router`), forwarded at `/api/v1` before the `/*glob` git routes, with a `json(conn, status, data)` helper; move the existing `/repos/:owner/:repo...` routes and their tests to `/api/v1/repos/...`. Unknown API paths get 404 with `{"message": "not found"}`. Test the 404 and one moved route.
+- [!] Move the JSON API out of `Nugitea.Router` into a new `Nugitea.API` (`use Plug.Router`), forwarded at `/api/v1` before the `/*glob` git routes, with a `json(conn, status, data)` helper; move the existing `/repos/:owner/:repo...` routes and their tests to `/api/v1/repos/...`. Unknown API paths get 404 with `{"message": "not found"}`. Test the 404 and one moved route.
 - [ ] Add `GET /api/v1/version` to `Nugitea.API`, returning `{"version": ...}` from `Application.spec(:nugitea, :vsn)`, like Gitea's `ServerVersion` (modules/structs/miscellaneous.go). Test it.
 - [ ] Add API authentication to `Nugitea.API`: a plug that reads `Authorization: token TOKEN`, `Authorization: Bearer TOKEN`, or basic auth with the token as the password, looks it up with `Nugitea.Accounts.Tokens.lookup_token/2`, and sets `conn.assigns.user_id` (nil without a header). An unknown token gets 401. Test all three header forms, no header, and a bad token.
 - [ ] Add `GET /api/v1/user`, returning the authenticated user as `{"id", "login"}` (a subset of Gitea's `User`, modules/structs/user.go), or 401 when anonymous. Test both.
