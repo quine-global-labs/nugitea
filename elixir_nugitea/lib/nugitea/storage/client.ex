@@ -21,6 +21,7 @@ defmodule Nugitea.Storage.Client do
   def delete(path), do: call(:delete, [path])
   def default_branch(path), do: call(:default_branch, [path])
   def set_default_branch(path, branch), do: call(:set_default_branch, [path, branch])
+  def size(path), do: call(:size, [path])
 
   @doc """
   Resolves client-supplied wire form (`ACME/platform/api.git`) against the

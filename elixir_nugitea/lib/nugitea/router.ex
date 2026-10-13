@@ -530,18 +530,31 @@ defmodule Nugitea.Router do
                     0
                 end
 
+              # Determine if repository is empty (has no branches)
+              empty = branch_count == 0
+
+              # Get the repository size using Storage.size
+              size =
+                case Client.size(repo_path) do
+                  {:ok, size_in_kib} ->
+                    size_in_kib
+
+                  {:error, _} ->
+                    0
+                end
+
               response_data = %{
                 id: repo_id,
                 name: repo_info.slug,
                 full_name: "#{owner}/#{repo}",
                 description: repo_info.description || "",
-                empty: false,
+                empty: empty,
                 private: repo_info.visibility == :private,
                 fork: false,
                 template: false,
                 parent: nil,
                 mirror: false,
-                size: 0,
+                size: size,
                 language: nil,
                 languages_url: "",
                 html_url: "",

@@ -292,5 +292,42 @@ defmodule Nugitea.Storage do
     end
   end
 
+  @doc """
+  Returns the size of a repository in KiB, using `git count-objects -v`.
+  The result is the sum of `size` and `size-pack` from git count-objects.
+  """
+  def size(path) do
+    with {:ok, dir} <- existing(path) do
+      case capture(dir, ["count-objects", "-v"]) do
+        {:ok, output} ->
+          # Parse the output to extract size and size-pack
+          size =
+            output
+            |> String.split("\n")
+            |> Enum.reduce(0, fn line, acc ->
+              case Regex.run(~r/^size:\s+(\d+)/, line) do
+                [_, size_str] -> acc + String.to_integer(size_str)
+                _ -> acc
+              end
+            end)
+
+          size_pack =
+            output
+            |> String.split("\n")
+            |> Enum.reduce(0, fn line, acc ->
+              case Regex.run(~r/^size-pack:\s+(\d+)/, line) do
+                [_, size_pack_str] -> acc + String.to_integer(size_pack_str)
+                _ -> acc
+              end
+            end)
+
+          {:ok, size + size_pack}
+
+        _ ->
+          {:error, "Unable to determine size"}
+      end
+    end
+  end
+
   defp root, do: Application.fetch_env!(:nugitea, :repo_root)
 end
