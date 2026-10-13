@@ -1095,6 +1095,47 @@ defmodule Nugitea.Router do
     end
   end
 
+  get "/api/v1/repos/:owner/:repo/raw/*path" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+    path = conn.params["path"]
+    ref = conn.query_params["ref"]
+
+    if owner != nil and repo != nil and path != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        _ ->
+          # Get repository path for storage access  
+          repo_path = "#{owner}/#{repo}"
+
+          # Determine reference - default to HEAD if not provided
+          resolved_ref = if ref != nil and ref != "", do: ref, else: "HEAD"
+
+          case Client.blob(repo_path, resolved_ref, path) do
+            {:ok, %{content: content}} ->
+              # Determine content type based on whether the content is valid UTF-8
+              content_type =
+                if String.valid?(content) and String.length(content) > 0,
+                  do: "text/plain; charset=utf-8",
+                  else: "application/octet-stream"
+
+              conn
+              |> put_resp_content_type(content_type)
+              |> send_resp(200, content)
+
+            {:error, _} ->
+              send_resp(conn, 404, "not found")
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   get "/*glob" do
     conn = fetch_query_params(conn)
 
