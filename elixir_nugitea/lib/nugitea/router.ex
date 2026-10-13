@@ -92,26 +92,88 @@ defmodule Nugitea.Router do
             # Determine effective role using Directory.effective_role/3
             role = Nugitea.Accounts.Directory.effective_role(dir, user, repo_id)
 
-            # Get owner username from the directory
-            owner_account = dir.accounts[repo_info.owner]
+            # Get repository path for storage access
+            repo_path = "#{owner}/#{repo}"
+
+            # Get branch count using existing branches command
+            branch_count =
+              case Client.branches(repo_path) do
+                {:ok, branches} ->
+                  length(branches)
+
+                {:error, _} ->
+                  0
+              end
 
             response_data = %{
+              id: repo_id,
               name: repo_info.slug,
-              owner: %{
-                username: owner_account.slug
-              },
-              private: repo_info.visibility == :private,
+              full_name: "#{owner}/#{repo}",
               description: repo_info.description || "",
+              empty: false,
+              private: repo_info.visibility == :private,
+              fork: false,
+              template: false,
+              parent: nil,
+              mirror: false,
               size: 0,
-              commit_count: 0,
-              branch_count: 0,
-              pull_request_count: length(dir.pull_requests[repo_id] || []),
+              language: nil,
+              languages_url: "",
+              html_url: "",
+              url: "",
+              ssh_url: "",
+              clone_url: "",
+              original_url: "",
+              website: "",
+              stars_count: 0,
+              forks_count: 0,
+              watchers_count: 0,
+              branch_count: branch_count,
+              open_issues_count: length(dir.pull_requests[repo_id] || []),
+              open_pr_counter: length(dir.pull_requests[repo_id] || []),
+              release_counter: 0,
+              default_branch: "main",
+              created_at: DateTime.utc_now(),
+              updated_at: DateTime.utc_now(),
               permissions: %{
                 admin: role == :admin,
                 push: role == :admin || role == :write,
-                # Anonymous users can always read for pull operations
                 pull: true
-              }
+              },
+              has_code: true,
+              has_issues: false,
+              internal_tracker: nil,
+              external_tracker: nil,
+              has_wiki: false,
+              external_wiki: nil,
+              has_pull_requests: true,
+              has_projects: false,
+              projects_mode: "repo",
+              has_releases: false,
+              has_packages: false,
+              has_actions: false,
+              ignore_whitespace_conflicts: false,
+              allow_merge_commits: true,
+              allow_rebase: true,
+              allow_rebase_explicit: true,
+              allow_squash_merge: true,
+              allow_fast_forward_only_merge: false,
+              allow_merge_update: false,
+              allow_rebase_update: false,
+              allow_manual_merge: true,
+              autodetect_manual_merge: false,
+              default_delete_branch_after_merge: false,
+              default_merge_style: "merge",
+              default_update_style: "merge",
+              default_allow_maintainer_edit: false,
+              avatar_url: "",
+              internal: false,
+              mirror_interval: "",
+              object_format_name: "sha1",
+              mirror_updated: DateTime.utc_now(),
+              mirror_last_sync_at: DateTime.utc_now(),
+              topics: repo_info.topics || [],
+              licenses: []
             }
 
             conn
