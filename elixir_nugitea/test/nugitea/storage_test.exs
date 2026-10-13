@@ -198,4 +198,65 @@ defmodule Nugitea.StorageTest do
     assert is_integer(size_after)
     assert size_after > size
   end
+
+  test "commits/3 with limit and skip options", %{tmp_dir: root} do
+    # Create a bare repository
+    assert Storage.init_bare("alice/demo") == :ok
+
+    # Create temp git repo to populate commits
+    tmp_git_dir = Path.join(root, "tmp_git")
+    File.mkdir_p!(tmp_git_dir)
+
+    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
+
+    # Create 3 commits
+    File.write!(tmp_git_dir <> "/file1.txt", "content 1")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Commit 1"], cd: tmp_git_dir)
+
+    File.write!(tmp_git_dir <> "/file2.txt", "content 2")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Commit 2"], cd: tmp_git_dir)
+
+    File.write!(tmp_git_dir <> "/file3.txt", "content 3")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Commit 3"], cd: tmp_git_dir)
+
+    # Push to the bare repo
+    bare_path = Path.join(root, "alice/demo.git")
+    System.cmd("git", ["remote", "add", "origin", bare_path], cd: tmp_git_dir)
+    System.cmd("git", ["push", "origin", "main"], cd: tmp_git_dir)
+
+    # Test commits with no options 
+    assert {:ok, commits} = Storage.commits("alice/demo", "main", %{})
+    assert length(commits) == 3
+
+    # Test commits with limit
+    assert {:ok, commits_limited} = Storage.commits("alice/demo", "main", %{limit: 2})
+    assert length(commits_limited) == 2
+
+    # Test commits with skip
+    assert {:ok, commits_skipped} = Storage.commits("alice/demo", "main", %{skip: 1})
+    assert length(commits_skipped) == 2
+
+    # Test commits with both limit and skip
+    assert {:ok, commits_limited_skipped} =
+             Storage.commits("alice/demo", "main", %{limit: 1, skip: 1})
+
+    assert length(commits_limited_skipped) == 1
+
+    # Verify commit fields are present 
+    commit = hd(commits)
+    assert commit[:sha] != nil
+    assert commit[:parents] != nil
+    assert commit[:author_name] != nil
+    assert commit[:author_email] != nil
+    assert commit[:author_date] != nil
+    assert commit[:committer_name] != nil
+    assert commit[:committer_email] != nil
+    assert commit[:committer_date] != nil
+    assert commit[:message] != nil
+  end
 end

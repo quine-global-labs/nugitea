@@ -329,5 +329,78 @@ defmodule Nugitea.Storage do
     end
   end
 
+  @doc """
+  Lists commits in the repository.
+
+  Options:
+  - `limit`: maximum number of commits to return (default: all)
+  - `skip`: number of commits to skip (default: 0)
+  - `path`: filter commits by path
+
+  Returns a list of commit maps with keys:
+  %{sha, parents, author_name, author_email, author_date, committer_name, 
+    committer_email, committer_date, message}
+  """
+  def commits(path, ref, opts) do
+    with {:ok, dir} <- existing(path) do
+      base_args = [
+        "log",
+        "--format=%H%x00%P%x00%an%x00%ae%x00%ad%x00%cn%x00%ce%x00%cd%x00%s",
+        "--date=iso"
+      ]
+
+      # Build arguments with options
+      processed_args =
+        base_args
+        |> add_option(opts, :limit, "-n")
+        |> add_option(opts, :skip, "--skip")
+        |> add_path_filter(opts)
+
+      full_args = processed_args ++ [ref]
+
+      case capture(dir, full_args) do
+        {:ok, out} ->
+          commits =
+            String.split(out, "\n", trim: true)
+            |> Enum.map(fn commit_line ->
+              parts = String.split(commit_line, "\x00", parts: 9)
+
+              [
+                sha: Enum.at(parts, 0),
+                parents: Enum.at(parts, 1) |> String.split(" ", trim: true),
+                author_name: Enum.at(parts, 2),
+                author_email: Enum.at(parts, 3),
+                author_date: Enum.at(parts, 4),
+                committer_name: Enum.at(parts, 5),
+                committer_email: Enum.at(parts, 6),
+                committer_date: Enum.at(parts, 7),
+                message: Enum.at(parts, 8)
+              ]
+            end)
+
+          {:ok, commits}
+
+        {:error, _} = err ->
+          err
+      end
+    end
+  end
+
+  defp add_option(args, opts, key, flag) do
+    if opts[key] do
+      args ++ [flag, Integer.to_string(opts[key])]
+    else
+      args
+    end
+  end
+
+  defp add_path_filter(args, opts) do
+    if opts[:path] do
+      args ++ ["--follow", "--", opts[:path]]
+    else
+      args
+    end
+  end
+
   defp root, do: Application.fetch_env!(:nugitea, :repo_root)
 end
