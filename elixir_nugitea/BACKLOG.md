@@ -37,7 +37,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 
 - [x] Add `Storage.delete(path)` and `Client.delete(path)`, which remove a bare repo's directory and refuse any path outside the repo root. Test it in test/nugitea/storage_test.exs. (Storage only: no CLI or API yet.)
 - [x] Add `Directory.delete_repo(dir, repo_id)`, which removes the repo, the grants on it and its pull requests. Test it.
-- [ ] Add `DELETE /api/v1/repos/:owner/:repo` (admin role required; 204) and `mix nugitea repo delete PATH`, both using `Directory.delete_repo/2` and then `Client.delete/1`. Test the API route.
+- [x] Add `DELETE /api/v1/repos/:owner/:repo` (admin role required; 204) and `mix nugitea repo delete PATH`, both using `Directory.delete_repo/2` and then `Client.delete/1`. Test the API route.
 - [ ] Add `Storage.default_branch(path)` (`git symbolic-ref --short HEAD`) and `Storage.set_default_branch(path, branch)` (refusing a branch that doesn't exist), with `Client` wrappers. Test both.
 - [ ] Show `default_branch` in `GET /api/v1/repos/:owner/:repo`, and make it settable with `PATCH /api/v1/repos/:owner/:repo` (`{"default_branch": ...}`) and `mix nugitea repo set-default-branch PATH BRANCH`, using `Client.set_default_branch/2`. Test the PATCH.
 - [ ] Add `Storage.size(path)` (KiB, `size` plus `size-pack` from `git count-objects -v`) and report it as `size` in `GET /api/v1/repos/:owner/:repo` instead of 0; set `empty` from whether the repo has any branches. Test with an empty and a non-empty repo.

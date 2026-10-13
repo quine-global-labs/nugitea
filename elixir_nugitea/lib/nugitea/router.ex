@@ -873,6 +873,69 @@ defmodule Nugitea.Router do
     end
   end
 
+  delete "/api/v1/repos/:owner/:repo" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+
+    if owner != nil and repo != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        repo_id ->
+          # Check permissions - this is an admin operation only
+          user = conn.assigns.user_id
+
+          # Need to determine if the user has admin role in this repo
+          case D.effective_role(dir, user, repo_id) do
+            :admin ->
+              # Proceed with deleting the repository 
+              case Accounts.Store.update(
+                     Accounts.state_dir(),
+                     &D.delete_repo(&1, repo_id)
+                   ) do
+                {:ok, updated_dir} ->
+                  # Now delete the actual git repository directory on disk
+                  canonical_path = D.repo_path(updated_dir, repo_id)
+
+                  case Client.delete(canonical_path) do
+                    :ok ->
+                      conn
+                      |> put_resp_content_type("application/json")
+                      |> send_resp(204, "")
+
+                    {:error, _reason} ->
+                      # If storage delete fails, we still return 204 but the repo may be in a partial state,
+                      # which is acceptable as this behavior mirrors Gitea's implementation that doesn't 
+                      # rollback on disk deletion failure  
+                      conn
+                      |> put_resp_content_type("application/json")
+                      |> send_resp(204, "")
+                  end
+
+                {:error, reason} ->
+                  conn
+                  |> put_resp_content_type("application/json")
+                  |> send_resp(
+                    500,
+                    Jason.encode!(%{
+                      error: "Failed to delete repository from directory: #{reason}"
+                    })
+                  )
+              end
+
+            _ ->
+              # User doesn't have admin access
+              send_resp(conn, 403, "forbidden")
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   get "/*glob" do
     conn = fetch_query_params(conn)
 

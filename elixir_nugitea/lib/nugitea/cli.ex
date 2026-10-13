@@ -10,6 +10,7 @@ defmodule Nugitea.CLI do
       repo create PATH [--visibility V]       PATH is `owner/name` or `org/sub/name`
       repo list
       repo set-topics PATH "topic1 topic2"
+      repo delete PATH
       team create ORG SLUG                    ORG is `org` or `parent/child`
       team add-member ORG/SLUG USER           USER is a login
       grant USER|ORG/TEAM REPO_OR_ORG_PATH ROLE
@@ -237,6 +238,34 @@ defmodule Nugitea.CLI do
       case Accounts.Store.update(Accounts.state_dir(), &D.set_repo_topics(&1, repo_id, topics)) do
         {:ok, _} -> IO.puts("Topics set for #{path}")
         {:error, reason} -> {:error, "Failed to set topics: #{reason}"}
+      end
+    end
+  end
+
+  defp run(["repo", "delete", path], _opts) do
+    start()
+
+    with {:ok, dir} <- Accounts.Store.load(Accounts.state_dir()),
+         repo_id <- D.resolve_repo(dir, path) do
+      # Delete the repository from both directory and storage
+      case Accounts.Store.update(
+             Accounts.state_dir(),
+             &D.delete_repo(&1, repo_id)
+           ) do
+        {:ok, updated_dir} ->
+          # Now delete the actual git repository directory on disk
+          canonical_path = D.repo_path(updated_dir, repo_id)
+
+          case Client.delete(canonical_path) do
+            :ok ->
+              IO.puts("Repository #{path} deleted")
+
+            {:error, reason} ->
+              {:error, "Failed to delete repository from disk: #{reason}"}
+          end
+
+        {:error, reason} ->
+          {:error, "Failed to delete repository from directory: #{reason}"}
       end
     end
   end
