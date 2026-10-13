@@ -210,6 +210,157 @@ defmodule Nugitea.Router do
     end
   end
 
+  get "/api/v1/orgs/:org" do
+    org_slug = conn.params["org"]
+
+    if org_slug != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      # Find organization by slug
+      account_id = D.resolve(dir, org_slug)
+
+      case D.account(dir, account_id) do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        %{kind: :org, id: org_id, slug: org_slug, visibility: visibility} ->
+          # Create the response with only the required fields: id, name, and visibility
+          response_data = %{
+            id: org_id,
+            name: org_slug,
+            visibility: visibility
+          }
+
+          conn
+          |> put_resp_content_type("application/json")
+          |> send_resp(200, Jason.encode!(response_data))
+
+        _ ->
+          # If it's not an org account, return 404
+          send_resp(conn, 404, "not found")
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
+  get "/api/v1/orgs/:org/repos" do
+    org_slug = conn.params["org"]
+
+    if org_slug != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      # Find organization by slug
+      account_id = D.resolve(dir, org_slug)
+
+      case D.account(dir, account_id) do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        %{kind: :org, id: org_id} ->
+          # Get all repos for this organization that the current caller can see
+          caller_id = Map.get(conn.assigns, :user_id, nil)
+
+          # Get all repos in the directory (we will filter them based on organization)
+          all_repos = D.repos(dir)
+
+          # Filter repos by organization and visibility/access
+          accessible_repos =
+            Enum.filter(all_repos, fn repo ->
+              # Check if the repo belongs to this org
+              # Check if the caller can see it (effective role != nil means access)
+              repo.owner == org_id &&
+                D.effective_role(dir, caller_id, repo.id) != nil
+            end)
+
+          response_data =
+            Enum.map(accessible_repos, fn repo ->
+              %{
+                id: repo.id,
+                name: repo.slug,
+                full_name: "#{org_slug}/#{repo.slug}",
+                description: Map.get(repo, :description, ""),
+                empty: false,
+                private: repo.visibility == :private,
+                fork: false,
+                template: false,
+                parent: nil,
+                mirror: false,
+                size: 0,
+                language: nil,
+                languages_url: "",
+                html_url: "",
+                url: "",
+                ssh_url: "",
+                clone_url: "",
+                original_url: "",
+                website: "",
+                stars_count: 0,
+                forks_count: 0,
+                watchers_count: 0,
+                branch_count: 0,
+                open_issues_count: length(dir.pull_requests[repo.id] || []),
+                open_pr_counter: length(dir.pull_requests[repo.id] || []),
+                release_counter: 0,
+                default_branch: "main",
+                created_at: DateTime.utc_now(),
+                updated_at: DateTime.utc_now(),
+                permissions: %{
+                  # For now we'll set this conservatively
+                  admin: false,
+                  push: false,
+                  pull: true
+                },
+                has_code: true,
+                has_issues: false,
+                internal_tracker: nil,
+                external_tracker: nil,
+                has_wiki: false,
+                external_wiki: nil,
+                has_pull_requests: true,
+                has_projects: false,
+                projects_mode: "repo",
+                has_releases: false,
+                has_packages: false,
+                has_actions: false,
+                ignore_whitespace_conflicts: false,
+                allow_merge_commits: true,
+                allow_rebase: true,
+                allow_rebase_explicit: true,
+                allow_squash_merge: true,
+                allow_fast_forward_only_merge: false,
+                allow_merge_update: false,
+                allow_rebase_update: false,
+                allow_manual_merge: true,
+                autodetect_manual_merge: false,
+                default_delete_branch_after_merge: false,
+                default_merge_style: "merge",
+                default_update_style: "merge",
+                default_allow_maintainer_edit: false,
+                avatar_url: "",
+                internal: false,
+                mirror_interval: "",
+                object_format_name: "sha1",
+                mirror_updated: DateTime.utc_now(),
+                mirror_last_sync_at: DateTime.utc_now(),
+                topics: repo.topics || [],
+                licenses: []
+              }
+            end)
+
+          conn
+          |> put_resp_content_type("application/json")
+          |> send_resp(200, Jason.encode!(response_data))
+
+        _ ->
+          # If it's not an org account, return 404
+          send_resp(conn, 404, "not found")
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   forward "/graphql",
     to: Absinthe.Plug.GraphiQL,
     init_opts: [schema: Nugitea.GraphQL.Schema, interface: :simple, json_codec: Jason]
