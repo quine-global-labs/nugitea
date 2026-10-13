@@ -155,4 +155,40 @@ defmodule Nugitea.RouterTest do
     # At minimum, the endpoint must be registered
     assert result.status == 401 or result.status == 200
   end
+
+  test "GET /repos/:owner/:repo returns 404 for private repo as anonymous user" do
+    # Create a private repo first
+    :ok =
+      Nugitea.Accounts.Store.update(Application.get_env(:nugitea, :state_dir), fn d ->
+        {:ok, d, _} = D.add_user(d, "private_owner")
+        {:ok, d, _} = D.add_repo_at(d, "private_owner/private_repo", :private)
+        {:ok, d}
+      end)
+
+    # Initialize the actual git repo 
+    Client.init_bare("private_owner/private_repo")
+
+    conn = :get |> Plug.Test.conn("/repos/private_owner/private_repo")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 404
+  end
+
+  test "GET /repos/:owner/:repo/permissions returns 404 for private repo as anonymous user" do
+    # Create a private repo first
+    :ok =
+      Nugitea.Accounts.Store.update(Application.get_env(:nugitea, :state_dir), fn d ->
+        {:ok, d, _} = D.add_user(d, "private_owner")
+        {:ok, d, _} = D.add_repo_at(d, "private_owner/private_repo", :private)
+        {:ok, d}
+      end)
+
+    # Initialize the actual git repo 
+    Client.init_bare("private_owner/private_repo")
+
+    conn = :get |> Plug.Test.conn("/repos/private_owner/private_repo/permissions")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 404
+  end
 end
