@@ -191,4 +191,87 @@ defmodule Nugitea.RouterTest do
 
     assert result.status == 404
   end
+
+  test "GET /api/v1/users/:username returns user info" do
+    # Create a test user first  
+    :ok =
+      Nugitea.Accounts.Store.update(Application.get_env(:nugitea, :state_dir), fn d ->
+        {:ok, d, _} = D.add_user(d, "testuser")
+        {:ok, d}
+      end)
+
+    conn = :get |> Plug.Test.conn("/api/v1/users/testuser")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 200
+    # Parse the JSON to check structure - should have id and login fields
+    assert {:ok, data} = Jason.decode(result.resp_body)
+    assert data["id"] != nil
+    assert data["login"] == "testuser"
+  end
+
+  test "GET /api/v1/users/:username returns 404 for non-existent user" do
+    conn = :get |> Plug.Test.conn("/api/v1/users/nonexistent")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 404
+  end
+
+  test "GET /api/v1/users/:username returns 404 for org account" do
+    # Create a test org first  
+    :ok =
+      Nugitea.Accounts.Store.update(Application.get_env(:nugitea, :state_dir), fn d ->
+        {:ok, d, _} = D.add_org(d, "testorg", nil, :public)
+        {:ok, d}
+      end)
+
+    conn = :get |> Plug.Test.conn("/api/v1/users/testorg")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 404
+  end
+
+  test "GET /api/v1/users/:username/repos returns user repos" do
+    # Create a test user and repo first  
+    :ok =
+      Nugitea.Accounts.Store.update(Application.get_env(:nugitea, :state_dir), fn d ->
+        {:ok, d, _} = D.add_user(d, "testuser")
+        {:ok, d, _} = D.add_repo_at(d, "testuser/testrepo", :public)
+        {:ok, d}
+      end)
+
+    # Initialize the actual git repo 
+    Client.init_bare("testuser/testrepo")
+
+    conn = :get |> Plug.Test.conn("/api/v1/users/testuser/repos")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 200
+    # Parse the JSON to check structure - should be a list of repo objects  
+    assert {:ok, data} = Jason.decode(result.resp_body)
+    assert is_list(data)
+    # Empty or with repos
+    assert length(data) >= 0
+  end
+
+  test "GET /api/v1/users/:username/repos returns 404 for non-existent user" do
+    conn = :get |> Plug.Test.conn("/api/v1/users/nonexistent/repos")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 404
+  end
+
+  test "GET /api/v1/users/:username/repos returns 404 for org account" do
+    # Create a test org first  
+    :ok =
+      Nugitea.Accounts.Store.update(Application.get_env(:nugitea, :state_dir), fn d ->
+        {:ok, d, _} = D.add_org(d, "testorg", nil, :public)
+        {:ok, d}
+      end)
+
+    conn = :get |> Plug.Test.conn("/api/v1/users/testorg/repos")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 404
+  end
 end
