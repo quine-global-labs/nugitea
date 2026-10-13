@@ -1013,6 +1013,84 @@ defmodule Nugitea.Router do
     end
   end
 
+  get "/api/v1/repos/:owner/:repo/compare/:basehead" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+    basehead = conn.params["basehead"]
+
+    if owner != nil and repo != nil and basehead != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        _repo_id ->
+          # Get repository path for storage access  
+          repo_path = "#{owner}/#{repo}"
+
+          # Parse basehead to separate base and head  
+          [base, head] = String.split(basehead, "...", parts: 2)
+
+          # Validate parts
+          if base == "" or head == "" do
+            send_resp(conn, 400, "Invalid basehead format")
+          else
+            # Get commits in the range (base..head)
+            case Client.commits(repo_path, "#{base}..#{head}", []) do
+              {:ok, commits} ->
+                # Calculate total commit count
+                total_commits = length(commits)
+
+                # Get changed files from git diff --name-only 
+                case Client.run_git(repo_path, ["diff", "--name-only", "#{base}...#{head}"]) do
+                  :ok ->
+                    # Since run_git returns command result in a different format than expected,
+                    # let's use our own approach to get changed files
+                    case System.cmd(
+                           "git",
+                           ["-C", repo_path, "diff", "--name-only", "#{base}...#{head}"],
+                           stderr_to_stdout: false
+                         ) do
+                      {files, 0} ->
+                        # Parse the file names into a proper response structure 
+                        changed_files =
+                          String.split(files, "\n", trim: true)
+                          |> Enum.filter(fn f -> f != "" end)
+                          |> Enum.map(&%{filename: &1, status: "modified"})
+
+                        # Construct the response with commits, total count and files 
+                        response_data = %{
+                          commits: commits,
+                          total_commits: total_commits,
+                          files: changed_files
+                        }
+
+                        conn
+                        |> put_resp_content_type("application/json")
+                        |> send_resp(200, Jason.encode!(response_data))
+
+                      _ ->
+                        # If we failed to get file names 
+                        send_resp(conn, 500, "Failed to retrieve changed files")
+                    end
+
+                  _ ->
+                    # If git command for diff fails (e.g., invalid base/commit), return 404
+                    send_resp(conn, 404, "not found")
+                end
+
+              {:error, _} ->
+                # If we couldn't get commits, it's likely a repo or commit reference error
+                send_resp(conn, 404, "not found")
+            end
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   # List all branches in a repository  
   get "/api/v1/repos/:owner/:repo/branches" do
     owner = conn.params["owner"]

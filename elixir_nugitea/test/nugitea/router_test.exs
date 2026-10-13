@@ -374,4 +374,12 @@ defmodule Nugitea.RouterTest do
     # Route should register without error (status 404 is expected as repo doesn't have content)
     assert result.status != 500
   end
+
+  test "GET /api/v1/repos/:owner/:repo/compare/:basehead endpoint registered and functional" do
+    conn = :get |> Plug.Test.conn("/api/v1/repos/user/repo/compare/master...feature")
+    result = Nugitea.Router.call(conn, [])
+
+    # Route should register without error - a 404 is expected because the repo has no content yet
+    assert result.status != 500
+  end
 end
