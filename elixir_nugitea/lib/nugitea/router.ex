@@ -361,6 +361,87 @@ defmodule Nugitea.Router do
     end
   end
 
+  get "/api/v1/orgs/:org/members" do
+    org_slug = conn.params["org"]
+
+    if org_slug != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      # Find organization by slug
+      account_id = D.resolve(dir, org_slug)
+
+      case D.account(dir, account_id) do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        %{kind: :org, id: org_id} ->
+          # Get all members of this organization
+          members = Map.get(dir.org_members, org_id, %{})
+
+          # Create response with id and login for each member
+          response_data =
+            Enum.map(members, fn {user_id, _role} ->
+              case D.account(dir, user_id) do
+                %{kind: :user, slug: user_slug} ->
+                  %{id: user_id, login: user_slug}
+
+                _ ->
+                  # Skip non-user accounts
+                  nil
+              end
+            end)
+            |> Enum.reject(&is_nil/1)
+
+          conn
+          |> put_resp_content_type("application/json")
+          |> send_resp(200, Jason.encode!(response_data))
+
+        _ ->
+          # If it's not an org account, return 404
+          send_resp(conn, 404, "not found")
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
+  get "/api/v1/orgs/:org/teams" do
+    org_slug = conn.params["org"]
+
+    if org_slug != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      # Find organization by slug
+      account_id = D.resolve(dir, org_slug)
+
+      case D.account(dir, account_id) do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        %{kind: :org, id: org_id} ->
+          # Get all teams for this organization
+          teams =
+            Enum.filter(Map.values(dir.teams), fn team -> team.org == org_id end)
+
+          # Create response with id and name for each team
+          response_data =
+            Enum.map(teams, fn team ->
+              %{id: team.id, name: team.slug}
+            end)
+
+          conn
+          |> put_resp_content_type("application/json")
+          |> send_resp(200, Jason.encode!(response_data))
+
+        _ ->
+          # If it's not an org account, return 404
+          send_resp(conn, 404, "not found")
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   forward "/graphql",
     to: Absinthe.Plug.GraphiQL,
     init_opts: [schema: Nugitea.GraphQL.Schema, interface: :simple, json_codec: Jason]
