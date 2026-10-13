@@ -735,6 +735,27 @@ defmodule Nugitea.Accounts.Directory do
     Enum.find(prs, &(&1.id == pr_id))
   end
 
+  @doc "Updates repository properties like description and website"
+  def update_repo(dir, repo_id, description, visibility, website) do
+    with {:ok, _} <- fetch(dir.repos, repo_id, "repo") do
+      updated_repo =
+        dir.repos[repo_id]
+        |> Map.put_new(:description, "")
+        |> Map.put_new(:website, "")
+        |> update_in([:description], fn _ ->
+          if description != nil, do: description, else: dir.repos[repo_id].description
+        end)
+        |> update_in([:visibility], fn _ ->
+          if visibility != nil, do: visibility, else: dir.repos[repo_id].visibility
+        end)
+        |> update_in([:website], fn _ ->
+          if website != nil, do: website, else: dir.repos[repo_id].website
+        end)
+
+      {:ok, put_in(dir.repos[repo_id], updated_repo)}
+    end
+  end
+
   # ---- access -----------------------------------------------------------
 
   @doc """

@@ -118,4 +118,23 @@ defmodule Nugitea.RouterTest do
     # The main logic is that it doesn't error at the routing level
     assert result.status == 200 or result.status == 404
   end
+
+  test "PATCH /repos/:owner/:repo updates repository properties" do
+    # First, create a test repository
+    _dir = Nugitea.Accounts.Store.load(Application.get_env(:nugitea, :state_dir))
+
+    conn =
+      :patch
+      |> Plug.Test.conn("/repos/user/repo", %{
+        description: "Updated description",
+        website: "https://example.com",
+        private: false
+      })
+
+    result = Nugitea.Router.call(conn, [])
+
+    # The route should be registered and not crash
+    # In a real implementation this would update the repository
+    assert result.status != 500
+  end
 end

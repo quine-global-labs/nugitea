@@ -305,6 +305,148 @@ defmodule Nugitea.Router do
     end
   end
 
+  patch "/repos/:owner/:repo" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+
+    if owner != nil and repo != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        repo_id ->
+          # Parse request body for update data
+          case Plug.Conn.read_body(conn) do
+            {:ok, body, _conn} ->
+              case Jason.decode(body) do
+                {:ok, params} ->
+                  # Extract fields to be updated
+                  description = Map.get(params, "description")
+                  website = Map.get(params, "website")
+                  private = Map.get(params, "private")
+
+                  # Determine visibility based on the private flag
+                  visibility =
+                    if private != nil do
+                      if private, do: :private, else: :public
+                    else
+                      nil
+                    end
+
+                  # Update repository properties in the directory
+                  case Accounts.Store.update(
+                         Accounts.state_dir(),
+                         &D.update_repo(&1, repo_id, description, visibility, website)
+                       ) do
+                    {:ok, updated_dir} ->
+                      # Get the updated repository information
+                      repo_info = updated_dir.repos[repo_id]
+
+                      # Return success with updated repository data
+                      response_data = %{
+                        id: repo_id,
+                        name: repo_info.slug,
+                        full_name: "#{owner}/#{repo}",
+                        description: repo_info.description || "",
+                        empty: false,
+                        private: repo_info.visibility == :private,
+                        fork: false,
+                        template: false,
+                        parent: nil,
+                        mirror: false,
+                        size: 0,
+                        language: nil,
+                        languages_url: "",
+                        html_url: "",
+                        url: "",
+                        ssh_url: "",
+                        clone_url: "",
+                        original_url: "",
+                        website: repo_info.website || "",
+                        stars_count: 0,
+                        forks_count: 0,
+                        watchers_count: 0,
+                        # Default, would need to be computed
+                        branch_count: 0,
+                        open_issues_count: length(updated_dir.pull_requests[repo_id] || []),
+                        open_pr_counter: length(updated_dir.pull_requests[repo_id] || []),
+                        release_counter: 0,
+                        default_branch: "main",
+                        created_at: DateTime.utc_now(),
+                        updated_at: DateTime.utc_now(),
+                        permissions: %{
+                          admin: true,
+                          push: true,
+                          pull: true
+                        },
+                        has_code: true,
+                        has_issues: false,
+                        internal_tracker: nil,
+                        external_tracker: nil,
+                        has_wiki: false,
+                        external_wiki: nil,
+                        has_pull_requests: true,
+                        has_projects: false,
+                        projects_mode: "repo",
+                        has_releases: false,
+                        has_packages: false,
+                        has_actions: false,
+                        ignore_whitespace_conflicts: false,
+                        allow_merge_commits: true,
+                        allow_rebase: true,
+                        allow_rebase_explicit: true,
+                        allow_squash_merge: true,
+                        allow_fast_forward_only_merge: false,
+                        allow_merge_update: false,
+                        allow_rebase_update: false,
+                        allow_manual_merge: true,
+                        autodetect_manual_merge: false,
+                        default_delete_branch_after_merge: false,
+                        default_merge_style: "merge",
+                        default_update_style: "merge",
+                        default_allow_maintainer_edit: false,
+                        avatar_url: "",
+                        internal: false,
+                        mirror_interval: "",
+                        object_format_name: "sha1",
+                        mirror_updated: DateTime.utc_now(),
+                        mirror_last_sync_at: DateTime.utc_now(),
+                        topics: repo_info.topics || [],
+                        licenses: []
+                      }
+
+                      conn
+                      |> put_resp_content_type("application/json")
+                      |> send_resp(200, Jason.encode!(response_data))
+
+                    {:error, reason} ->
+                      conn
+                      |> put_resp_content_type("application/json")
+                      |> send_resp(
+                        500,
+                        Jason.encode!(%{error: "Failed to update repository: #{reason}"})
+                      )
+                  end
+
+                {:error, _reason} ->
+                  conn
+                  |> put_resp_content_type("application/json")
+                  |> send_resp(400, Jason.encode!(%{error: "Invalid JSON in request body"}))
+              end
+
+            {:error, reason} ->
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(500, Jason.encode!(%{error: "Failed to read request body: #{reason}"}))
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   get "/*glob" do
     conn = fetch_query_params(conn)
 
