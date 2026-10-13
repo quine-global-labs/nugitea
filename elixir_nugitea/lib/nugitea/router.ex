@@ -91,77 +91,30 @@ defmodule Nugitea.Router do
             # Determine effective role using Directory.effective_role/3
             role = Nugitea.Accounts.Directory.effective_role(dir, user, repo_id)
 
-            # Get repository size (approximate) - use branches info to estimate
-            case Client.branches("#{owner}/#{repo}") do
-              {:ok, branches} ->
-                # Calculate approximate commit count from branches
-                commit_count =
-                  Enum.reduce(branches, 0, fn _branch, acc ->
-                    # For simplicity, we'll just count branches to get some measure of repository activity  
-                    acc + 1
-                  end)
+            # Get owner username from the directory
+            owner_account = dir.accounts[repo_info.owner]
 
-                # Get branch count for the repository
-                branch_count = length(branches)
+            response_data = %{
+              name: repo_info.slug,
+              owner: %{
+                username: owner_account.slug
+              },
+              private: repo_info.visibility == :private,
+              description: repo_info.description || "",
+              size: 0,
+              commit_count: 0,
+              branch_count: 0,
+              permissions: %{
+                admin: role == :admin,
+                push: role == :admin || role == :write,
+                # Anonymous users can always read for pull operations
+                pull: true
+              }
+            }
 
-                # Get repo owner's name (which is the account slug)
-                owner_account = dir.accounts[repo_info.owner]
-
-                # Calculate repository size in bytes - this requires calling git to get size
-                # We simulate by using the number of commits for now, since we don't have the exact implementation
-                # Simple approximation
-                size = commit_count * 1024
-
-                response_data = %{
-                  name: repo_info.slug,
-                  owner: %{
-                    username: owner_account.slug
-                  },
-                  private: repo_info.visibility == :private,
-                  # We don't have this in the directory structure - would need git to access description
-                  description: "",
-                  size: size,
-                  commit_count: commit_count,
-                  branch_count: branch_count,
-                  permissions: %{
-                    admin: role == :admin,
-                    push: role == :admin || role == :write,
-                    # Anonymous users can always read for pull operations
-                    pull: true
-                  }
-                }
-
-                conn
-                |> put_resp_content_type("application/json")
-                |> send_resp(200, Jason.encode!(response_data))
-
-              {:error, _} ->
-                # If we can't get the branches, fall back to basic data
-                owner_account = dir.accounts[repo_info.owner]
-
-                response_data = %{
-                  name: repo_info.slug,
-                  owner: %{
-                    username: owner_account.slug
-                  },
-                  private: repo_info.visibility == :private,
-                  # We don't have description in directory structure
-                  description: "",
-                  size: 0,
-                  commit_count: 0,
-                  branch_count: 0,
-                  permissions: %{
-                    admin: role == :admin,
-                    push: role == :admin || role == :write,
-                    # Anonymous users can always read for pull operations
-                    pull: true
-                  }
-                }
-
-                conn
-                |> put_resp_content_type("application/json")
-                |> send_resp(200, Jason.encode!(response_data))
-            end
+            conn
+            |> put_resp_content_type("application/json")
+            |> send_resp(200, Jason.encode!(response_data))
           end
       end
     else
