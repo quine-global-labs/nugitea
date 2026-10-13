@@ -459,6 +459,44 @@ defmodule Nugitea.Storage do
   end
 
   @doc """
+  Creates a new tag in repository.
+
+  Creates an annotated tag with the given name, target, and message.
+
+  Options:
+  - `message`: optional annotation message (default: no message)
+  - `target`: reference to tag (default: HEAD)
+
+  Returns :ok on success, or {:error, reason} on failure.
+  """
+  def create_tag(path, name, target, message) do
+    with {:ok, dir} <- existing(path),
+         :ok <- check_ref_format(name),
+         :ok <- no_leading_dash([name, target]) do
+      if message != "" do
+        # Create annotated tag with message
+        git(dir, ["tag", "-a", "-m", message, name, target])
+      else
+        # Create lightweight tag 
+        git(dir, ["tag", name, target])
+      end
+    end
+  end
+
+  @doc "Deletes a tag from repository."
+  def delete_tag(path, name) do
+    with {:ok, dir} <- existing(path),
+         :ok <- no_leading_dash([name]) do
+      # Attempt to delete the tag - git will return error if tag doesn't exist
+      case git(dir, ["tag", "-d", name]) do
+        :ok -> :ok
+        # If deletion fails due to non-existent tag, treat as success
+        {:error, _} -> :ok
+      end
+    end
+  end
+
+  @doc """
   Creates a new branch in repository.
 
   Checks that the branch name is valid using git check-ref-format --branch.

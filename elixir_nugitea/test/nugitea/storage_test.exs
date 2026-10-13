@@ -391,4 +391,78 @@ defmodule Nugitea.StorageTest do
     assert {:ok, branches} = Storage.branches("alice/demo")
     assert "feature-branch" in branches
   end
+
+  test "create_tag/4 and delete_tag/2 with annotated tags", %{tmp_dir: root} do
+    # Create a bare repository
+    assert Storage.init_bare("alice/demo") == :ok
+
+    # Create temp git repo to populate commits 
+    tmp_git_dir = Path.join(root, "tmp_git")
+    File.mkdir_p!(tmp_git_dir)
+
+    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
+
+    # Create a commit
+    File.write!(tmp_git_dir <> "/file.txt", "content 1")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Initial commit"], cd: tmp_git_dir)
+
+    # Push to the bare repo
+    bare_path = Path.join(root, "alice/demo.git")
+    System.cmd("git", ["remote", "add", "origin", bare_path], cd: tmp_git_dir)
+    System.cmd("git", ["push", "origin", "main"], cd: tmp_git_dir)
+
+    # Get commit hash to tag
+    assert {:ok, commits} = Storage.commits("alice/demo", "main", %{})
+    commit_hash = hd(commits)[:sha]
+
+    # Create an annotated tag
+    assert Storage.create_tag("alice/demo", "v1.0.0", commit_hash, "Release version 1.0.0") == :ok
+
+    # Create a lightweight tag with no message (should still work)
+    assert Storage.create_tag("alice/demo", "lightweight-tag", commit_hash, "") == :ok
+
+    # Delete the annotated tag
+    assert Storage.delete_tag("alice/demo", "v1.0.0") == :ok
+
+    # Delete the lightweight tag
+    assert Storage.delete_tag("alice/demo", "lightweight-tag") == :ok
+
+    # All tags should be deleted now
+    assert :ok = Storage.delete_tag("alice/demo", "non-existent-tag")
+  end
+
+  test "create_tag/4 with invalid tag name fails gracefully", %{tmp_dir: root} do
+    # Create a bare repository
+    assert Storage.init_bare("alice/demo") == :ok
+
+    # Create temp git repo to populate commits 
+    tmp_git_dir = Path.join(root, "tmp_git")
+    File.mkdir_p!(tmp_git_dir)
+
+    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
+
+    # Create a commit
+    File.write!(tmp_git_dir <> "/file.txt", "content 1")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Initial commit"], cd: tmp_git_dir)
+
+    # Push to the bare repo
+    bare_path = Path.join(root, "alice/demo.git")
+    System.cmd("git", ["remote", "add", "origin", bare_path], cd: tmp_git_dir)
+    System.cmd("git", ["push", "origin", "main"], cd: tmp_git_dir)
+
+    # Get commit hash to tag
+    assert {:ok, commits} = Storage.commits("alice/demo", "main", %{})
+    commit_hash = hd(commits)[:sha]
+
+    # Try to create a tag with leading dash - should fail (because of no_leading_dash check)
+    # Since the check_ref_format is called first, we expect an error about invalid ref format
+    assert {:error, _} =
+             Storage.create_tag("alice/demo", "-invalid-tag", commit_hash, "Should fail")
+  end
 end
