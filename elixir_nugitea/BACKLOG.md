@@ -31,7 +31,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 - [x] Add `GET /api/v1/orgs/:org/members` (the members' `{"id", "login"}`, using `Directory.org_member?/3`) and `GET /api/v1/orgs/:org/teams` (`[{"id", "name"}]`). Test both.
 - [!] Add `POST /api/v1/user/repos` (`{"name", "private", "description"}`): creates the repo under the authenticated user with `Directory.add_repo/4` and `Client.init_bare/1`, and answers 201 with the repo JSON; 401 when anonymous, 409 when it exists. Test all three.
 - [!] Add `POST /api/v1/orgs/:org/repos`, like `POST /api/v1/user/repos` but owned by the org; only an org owner (`Directory.org_role/3` is `:owner`) may create one, others get 403. Test an owner, a member and an anonymous caller.
-- [ ] Add `GET /api/v1/repos/search?q=TEXT&limit=N`: the repos whose `owner/name` contains TEXT, ignoring case, that the caller can see, as `{"ok": true, "data": [repo, ...]}` like Gitea. Test matching, the limit, and that a private repo is hidden.
+- [!] Add `GET /api/v1/repos/search?q=TEXT&limit=N`: the repos whose `owner/name` contains TEXT, ignoring case, that the caller can see, as `{"ok": true, "data": [repo, ...]}` like Gitea. Test matching, the limit, and that a private repo is hidden.
 
 ### Repos on the storage tier
 
