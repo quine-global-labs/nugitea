@@ -226,6 +226,23 @@ defmodule Nugitea.Storage do
     end
   end
 
+  @doc "The default branch of a repository (`git symbolic-ref --short HEAD`)."
+  def default_branch(path) do
+    with {:ok, dir} <- existing(path),
+         {:ok, out} <- capture(dir, ["symbolic-ref", "--short", "HEAD"]) do
+      {:ok, String.trim(out)}
+    end
+  end
+
+  @doc "Sets the default branch of a repository (refusing a branch that doesn't exist)."
+  def set_default_branch(path, branch) do
+    with {:ok, dir} <- existing(path),
+         {:ok, _out} <- capture(dir, ["show-ref", "--verify", "refs/heads/#{branch}"]) do
+      :ok = git(dir, ["symbolic-ref", "HEAD", "refs/heads/#{branch}"])
+      :ok
+    end
+  end
+
   # git would read a leading "-" as an option, not a ref or path.
   defp no_leading_dash(args) do
     case Enum.find(args, &String.starts_with?(&1, "-")) do

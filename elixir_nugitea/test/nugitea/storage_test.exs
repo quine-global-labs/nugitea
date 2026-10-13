@@ -122,4 +122,42 @@ defmodule Nugitea.StorageTest do
 
     assert nested_content == "Nested content"
   end
+
+  test "default_branch/1 and set_default_branch/2", %{tmp_dir: root} do
+    # Create a bare repository
+    assert Storage.init_bare("alice/demo") == :ok
+
+    # Initially, default branch should be "main"
+    assert {:ok, "main"} = Storage.default_branch("alice/demo")
+
+    # Add another branch  
+    tmp_git_dir = Path.join(root, "tmp_git")
+    File.mkdir_p!(tmp_git_dir)
+
+    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
+
+    File.write!(tmp_git_dir <> "/test.txt", "Hello, world!")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Initial commit"], cd: tmp_git_dir)
+    System.cmd("git", ["checkout", "-b", "feature-branch"], cd: tmp_git_dir)
+
+    File.write!(tmp_git_dir <> "/feature.txt", "Feature content")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Add feature file"], cd: tmp_git_dir)
+
+    # Push to the bare repo
+    bare_path = Path.join(root, "alice/demo.git")
+    System.cmd("git", ["remote", "add", "origin", bare_path], cd: tmp_git_dir)
+    System.cmd("git", ["push", "origin", "main"], cd: tmp_git_dir)
+    System.cmd("git", ["push", "origin", "feature-branch"], cd: tmp_git_dir)
+
+    # Set default branch to feature-branch
+    assert Storage.set_default_branch("alice/demo", "feature-branch") == :ok
+    assert {:ok, "feature-branch"} = Storage.default_branch("alice/demo")
+
+    # Try setting to non-existent branch - should error
+    assert {:error, _} = Storage.set_default_branch("alice/demo", "non-existent")
+  end
 end
