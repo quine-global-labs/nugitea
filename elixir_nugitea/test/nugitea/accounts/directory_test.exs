@@ -280,4 +280,53 @@ defmodule Nugitea.Accounts.DirectoryTest do
     assert back == d
     assert D.effective_access(back, f.bob, f.api) == D.effective_access(d, f.bob, f.api)
   end
+
+  test "delete repo removes grants and pull requests" do
+    f = fixture()
+
+    # Create a new repo with grants and some pull requests for testing
+    {d, test_repo} = new!(D.add_repo(f.d, f.acme, "test", :private))
+
+    # Add grants to this repo
+    d = set!(D.grant(d, {:user, f.bob}, {:repo, test_repo}, :write))
+    d = set!(D.grant(d, {:team, f.devs}, {:repo, test_repo}, :read))
+
+    # Create some pull requests for the repo 
+    {d, _pr1_id} =
+      new!(D.create_pull_request(d, test_repo, "PR 1", "desc 1", "feature", "main", f.alice))
+
+    {d, _pr2_id} =
+      new!(D.create_pull_request(d, test_repo, "PR 2", "desc 2", "bugfix", "main", f.bob))
+
+    # Verify the repo and pull requests exist  
+    assert D.repo(d, test_repo) != nil
+    assert length(D.list_pull_requests(d, test_repo)) == 2
+
+    # Verify grants exist 
+    grant_count_before = length(d.grants)
+    assert Enum.any?(d.grants, fn g -> g.resource == {:repo, test_repo} end)
+
+    # Delete the repo - this is our new function
+    result = D.delete_repo(d, test_repo)
+    assert {:ok, deleted_dir} = result
+
+    # Verify the repo is gone
+    assert D.repo(deleted_dir, test_repo) == nil
+
+    # Verify pull requests are gone for this repo  
+    assert Map.get(deleted_dir.pull_requests, test_repo) == nil
+
+    # Verify grants for this repo are gone
+    assert not Enum.any?(deleted_dir.grants, fn g -> g.resource == {:repo, test_repo} end)
+
+    # Verify total grant count decreased (there were 2 grants for the deleted repo plus 1 from fixture)
+    assert length(deleted_dir.grants) < grant_count_before
+
+    # Verify other repos and data remain untouched
+    assert D.repo(deleted_dir, f.api) != nil
+    assert D.repo(deleted_dir, f.site) != nil
+    assert length(D.list_pull_requests(deleted_dir, f.api)) == 0
+    assert length(D.list_pull_requests(deleted_dir, f.site)) == 0
+    assert length(D.list_pull_requests(deleted_dir, test_repo)) == 0
+  end
 end

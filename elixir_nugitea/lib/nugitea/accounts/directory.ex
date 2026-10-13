@@ -756,6 +756,33 @@ defmodule Nugitea.Accounts.Directory do
     end
   end
 
+  @doc "Delete a repository and its associated grants and pull requests"
+  def delete_repo(dir, repo_id) do
+    with {:ok, _} <- fetch(dir.repos, repo_id, "repo") do
+      # Remove pull requests for this repository 
+      updated_pull_requests = Map.delete(dir.pull_requests, repo_id)
+
+      # Remove grants for this repository 
+      updated_grants =
+        Enum.filter(dir.grants, fn grant ->
+          grant.resource != {:repo, repo_id}
+        end)
+
+      # Remove the repo
+      updated_repos = Map.delete(dir.repos, repo_id)
+
+      # Create new directory with cleaned data
+      updated_dir = %{
+        dir
+        | repos: updated_repos,
+          grants: updated_grants,
+          pull_requests: updated_pull_requests
+      }
+
+      {:ok, updated_dir}
+    end
+  end
+
   # ---- access -----------------------------------------------------------
 
   @doc """
