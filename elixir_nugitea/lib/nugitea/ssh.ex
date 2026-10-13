@@ -170,7 +170,11 @@ defmodule Nugitea.SSH do
       with {:ok, verb, raw} <- parse(cmd),
            {:ok, dir} <- Accounts.Store.load(Accounts.state_dir()),
            {:ok, repo} <- found(Client.resolve(dir, raw), raw),
-           :ok <- if(Nugitea.Auth.allow?(verb, nil, repo), do: :ok, else: {:error, "forbidden"}) do
+           :ok <-
+             if(Nugitea.Auth.allow?(verb, state.user_id, repo),
+               do: :ok,
+               else: {:error, "forbidden"}
+             ) do
         {:ok, Client.start_exchange(repo, verb, protocol: state.protocol)}
       end
     end
