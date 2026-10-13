@@ -358,4 +358,20 @@ defmodule Nugitea.RouterTest do
 
     assert result.status == 404
   end
+
+  test "GET /api/v1/repos/:owner/:repo/git/commits/:sha.diff route registered and functional" do
+    conn = :get |> Plug.Test.conn("/repos/user/repo/git/commits/HEAD.diff")
+    result = Nugitea.Router.call(conn, [])
+
+    # Route should register without error (status 404 is expected as repo doesn't have content)
+    assert result.status != 500
+  end
+
+  test "GET /api/v1/repos/:owner/:repo/git/commits/:sha.patch route registered and functional" do
+    conn = :get |> Plug.Test.conn("/repos/user/repo/git/commits/HEAD.patch")
+    result = Nugitea.Router.call(conn, [])
+
+    # Route should register without error (status 404 is expected as repo doesn't have content)
+    assert result.status != 500
+  end
 end

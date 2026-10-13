@@ -259,4 +259,46 @@ defmodule Nugitea.StorageTest do
     assert commit[:committer_date] != nil
     assert commit[:message] != nil
   end
+
+  test "commit_diff/2 and commit_patch/2 with a commit", %{tmp_dir: root} do
+    # Create a bare repository
+    assert Storage.init_bare("alice/demo") == :ok
+
+    # Create temp git repo to populate commits 
+    tmp_git_dir = Path.join(root, "tmp_git")
+    File.mkdir_p!(tmp_git_dir)
+
+    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
+
+    # Create a commit with file changes
+    File.write!(tmp_git_dir <> "/file.txt", "content 1")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Initial commit"], cd: tmp_git_dir)
+
+    # Add another change to create a second commit
+    File.write!(tmp_git_dir <> "/file.txt", "content 1\ncontent 2")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Add content"], cd: tmp_git_dir)
+
+    # Push to the bare repo
+    bare_path = Path.join(root, "alice/demo.git")
+    System.cmd("git", ["remote", "add", "origin", bare_path], cd: tmp_git_dir)
+    System.cmd("git", ["push", "origin", "main"], cd: tmp_git_dir)
+
+    # Retrieve the commit SHA of the second commit (the last one)
+    assert {:ok, commits} = Storage.commits("alice/demo", "main", %{})
+    sha = hd(commits)[:sha]
+
+    # Test that diff works
+    assert {:ok, diff} = Storage.commit_diff("alice/demo", sha)
+    assert is_binary(diff)
+    assert String.contains?(diff, "diff --git")
+
+    # Test that patch works
+    assert {:ok, patch} = Storage.commit_patch("alice/demo", sha)
+    assert is_binary(patch)
+    assert String.contains?(patch, "From ")
+  end
 end

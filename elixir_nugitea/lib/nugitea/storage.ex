@@ -402,5 +402,23 @@ defmodule Nugitea.Storage do
     end
   end
 
+  @doc "Get the diff for a commit as text/plain"
+  def commit_diff(path, sha) do
+    with {:ok, dir} <- existing(path),
+         :ok <- no_leading_dash([sha]),
+         {:ok, out} <- capture(dir, ["diff", "#{sha}^", sha]) do
+      {:ok, out}
+    end
+  end
+
+  @doc "Get the patch for a commit as text/plain"
+  def commit_patch(path, sha) do
+    with {:ok, dir} <- existing(path),
+         :ok <- no_leading_dash([sha]),
+         {:ok, out} <- capture(dir, ["format-patch", "-1", "--stdout", sha]) do
+      {:ok, out}
+    end
+  end
+
   defp root, do: Application.fetch_env!(:nugitea, :repo_root)
 end

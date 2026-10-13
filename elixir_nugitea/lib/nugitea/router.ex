@@ -949,6 +949,70 @@ defmodule Nugitea.Router do
     end
   end
 
+  get "/api/v1/repos/:owner/:repo/git/commits/:sha.diff" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+    sha = conn.params["sha"]
+
+    if owner != nil and repo != nil and sha != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        _ ->
+          # Get repository path for storage access  
+          repo_path = "#{owner}/#{repo}"
+
+          case Client.commit_diff(repo_path, sha) do
+            {:ok, diff} ->
+              conn
+              |> put_resp_content_type("text/plain")
+              |> send_resp(200, diff)
+
+            {:error, _} ->
+              # If we couldn't get the diff (e.g., commit doesn't exist), return 404
+              send_resp(conn, 404, "not found")
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
+  get "/api/v1/repos/:owner/:repo/git/commits/:sha.patch" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+    sha = conn.params["sha"]
+
+    if owner != nil and repo != nil and sha != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        _ ->
+          # Get repository path for storage access  
+          repo_path = "#{owner}/#{repo}"
+
+          case Client.commit_patch(repo_path, sha) do
+            {:ok, patch} ->
+              conn
+              |> put_resp_content_type("text/plain")
+              |> send_resp(200, patch)
+
+            {:error, _} ->
+              # If we couldn't get the patch (e.g., commit doesn't exist), return 404
+              send_resp(conn, 404, "not found")
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   get "/*glob" do
     conn = fetch_query_params(conn)
 
