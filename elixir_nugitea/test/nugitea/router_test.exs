@@ -382,4 +382,18 @@ defmodule Nugitea.RouterTest do
     # Route should register without error - a 404 is expected because the repo has no content yet
     assert result.status != 500
   end
+
+  test "GET /api/v1/repos/:owner/:repo/archive/*archive endpoint registered and functional" do
+    conn = :get |> Plug.Test.conn("/api/v1/repos/user/repo/archive/main.zip")
+    result = Nugitea.Router.call(conn, [])
+
+    # Route should register without error - a 404 is expected because repo doesn't have content yet
+    assert result.status != 500
+
+    conn = :get |> Plug.Test.conn("/api/v1/repos/user/repo/archive/main.tar.gz")
+    result = Nugitea.Router.call(conn, [])
+
+    # Route should register without error - a 404 is expected because repo doesn't have content yet  
+    assert result.status != 500
+  end
 end

@@ -28,6 +28,7 @@ defmodule Nugitea.Storage.Client do
   def branch_tips(path), do: call(:branch_tips, [path])
   def branch(path, branch_name), do: call(:branch, [path, branch_name])
   def create_branch(path, name, from_ref), do: call(:create_branch, [path, name, from_ref])
+  def archive(path, ref, format), do: call(:archive, [path, ref, format])
 
   @doc """
   Resolves client-supplied wire form (`ACME/platform/api.git`) against the

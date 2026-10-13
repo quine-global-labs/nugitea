@@ -61,7 +61,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 - [!] Add `Storage.delete_file(path, branch, file_path, message, author)` (as `commit_file`, with `git update-index --remove`) and `DELETE /api/v1/repos/:owner/:repo/contents/*path` (`{"sha", "message", "branch"}`; write access required). Test it.
 - [x] Add `GET /api/v1/repos/:owner/:repo/compare/:basehead`, where basehead is `BASE...HEAD`: the commits in `BASE..HEAD` (as the commits route shows them), `total_commits`, and the changed `files` (`git diff --name-status BASE...HEAD`). Test it with two branches.
 - [!] Add `GET /api/v1/repos/:owner/:repo/languages`: bytes per language on the default branch, from `git ls-tree -r -l`, mapping file extensions with a small table in a new `Nugitea.Languages` module (Elixir, Erlang, Go, Rust, JavaScript, TypeScript, Python, Ruby, C, C++, Java, Shell, HTML, CSS), as `{"Elixir": 1234}`. Test it, including that unknown extensions are left out.
-- [ ] Add `GET /api/v1/repos/:owner/:repo/archive/:archive`, where archive is `REF.zip` or `REF.tar.gz`, via `Storage.archive(path, ref, format)` running `git archive --prefix=NAME/`. Test that the zip starts with `PK` and the tar.gz with gzip's magic bytes.
+- [x] Add `GET /api/v1/repos/:owner/:repo/archive/:archive`, where archive is `REF.zip` or `REF.tar.gz`, via `Storage.archive(path, ref, format)` running `git archive --prefix=NAME/`. Test that the zip starts with `PK` and the tar.gz with gzip's magic bytes.
 
 ### Access control
 

@@ -1173,6 +1173,64 @@ defmodule Nugitea.Router do
     end
   end
 
+  get "/api/v1/repos/:owner/:repo/archive/*archive" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+    archive_path = conn.params["archive"]
+
+    if owner != nil and repo != nil and archive_path != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        _ ->
+          # Extract ref and format from archive path (e.g. "main.zip" or "v1.0.tar.gz")
+          [ref, format] =
+            archive_path
+            |> String.split(".")
+            |> Enum.take(-2)
+
+          # Validate format
+          case format do
+            "zip" ->
+              # Get repository path for storage access  
+              repo_path = "#{owner}/#{repo}"
+
+              case Client.archive(repo_path, ref, "zip") do
+                {:ok, archive_data} ->
+                  conn
+                  |> put_resp_content_type("application/zip")
+                  |> send_resp(200, archive_data)
+
+                {:error, _} ->
+                  send_resp(conn, 404, "not found")
+              end
+
+            "tar.gz" ->
+              # Get repository path for storage access  
+              repo_path = "#{owner}/#{repo}"
+
+              case Client.archive(repo_path, ref, "tar") do
+                {:ok, archive_data} ->
+                  conn
+                  |> put_resp_content_type("application/gzip")
+                  |> send_resp(200, archive_data)
+
+                {:error, _} ->
+                  send_resp(conn, 404, "not found")
+              end
+
+            _ ->
+              send_resp(conn, 404, "not found")
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   get "/api/v1/repos/:owner/:repo/raw/*path" do
     owner = conn.params["owner"]
     repo = conn.params["repo"]

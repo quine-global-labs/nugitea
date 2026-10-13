@@ -465,4 +465,60 @@ defmodule Nugitea.StorageTest do
     assert {:error, _} =
              Storage.create_tag("alice/demo", "-invalid-tag", commit_hash, "Should fail")
   end
+
+  test "archive/3 creates zip and tar.gz archives with correct content", %{tmp_dir: root} do
+    # Create a bare repository  
+    assert Storage.init_bare("alice/demo") == :ok
+
+    # Create temp git repo to populate commits 
+    tmp_git_dir = Path.join(root, "tmp_git")
+    File.mkdir_p!(tmp_git_dir)
+
+    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
+
+    # Create files and commit 
+    File.write!(tmp_git_dir <> "/file1.txt", "content 1")
+    File.write!(tmp_git_dir <> "/file2.txt", "content 2")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Initial commit"], cd: tmp_git_dir)
+
+    # Add another file and commit  
+    File.write!(tmp_git_dir <> "/file3.txt", "content 3")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Second commit"], cd: tmp_git_dir)
+
+    # Push to the bare repo
+    bare_path = Path.join(root, "alice/demo.git")
+    System.cmd("git", ["remote", "add", "origin", bare_path], cd: tmp_git_dir)
+    System.cmd("git", ["push", "origin", "main"], cd: tmp_git_dir)
+
+    # Get the commit hash for HEAD
+    assert {:ok, commits} = Storage.commits("alice/demo", "main", %{})
+    head_commit = hd(commits)[:sha]
+
+    # Test zip archive creation
+    assert {:ok, zip_data} = Storage.archive("alice/demo", "HEAD", "zip")
+    assert is_binary(zip_data)
+    # Check that it starts with PK (ZIP magic bytes)
+    assert byte_size(zip_data) > 0
+    assert <<0x50, 0x4B, _rest::binary>> = zip_data
+
+    # Test tar.gz archive creation  
+    assert {:ok, tar_gz_data} = Storage.archive("alice/demo", "HEAD", "tar.gz")
+    assert is_binary(tar_gz_data)
+    # Check that it starts with gzip magic bytes (1f 8b)  
+    assert byte_size(tar_gz_data) > 0
+    assert <<0x1F, 0x8B, _rest::binary>> = tar_gz_data
+
+    # Test archive with a specific commit (not HEAD)
+    assert {:ok, zip_data_from_commit} = Storage.archive("alice/demo", head_commit, "zip")
+    assert is_binary(zip_data_from_commit)
+    assert byte_size(zip_data_from_commit) > 0
+    assert <<0x50, 0x4B, _rest::binary>> = zip_data_from_commit
+
+    # Test archive with a non-existent ref returns error
+    assert {:error, _} = Storage.archive("alice/demo", "nonexistent-ref", "zip")
+  end
 end

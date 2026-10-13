@@ -459,6 +459,25 @@ defmodule Nugitea.Storage do
   end
 
   @doc """
+  Archives a repository at a specific reference with a prefix.
+
+  The format must be either "zip" or "tar.gz".
+  The name of the archive is based on the repository name.
+  Returns a stream of binary data of the archive.
+  """
+  def archive(path, ref, format) do
+    with {:ok, dir} <- existing(path),
+         name <- path |> String.split("/") |> List.last(),
+         prefix = "#{name}/",
+         command = ["archive", "--format=#{format}", "--prefix=#{prefix}", ref] do
+      case System.cmd("git", ["-C", dir | command], stderr_to_stdout: false) do
+        {out, 0} -> {:ok, out}
+        {_err, status} -> {:error, "git archive exited with status #{status}"}
+      end
+    end
+  end
+
+  @doc """
   Creates a new tag in repository.
 
   Creates an annotated tag with the given name, target, and message.
