@@ -16,7 +16,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 
 ### Clean up
 
-- [ ] Delete the stray `lib/nugitea/router.ex.backup`, and save each repo's `description` and `website` in accounts.json (`Nugitea.Accounts.Store.encode/1` and `decode/1`, defaulting to "" when missing). Test that a repo's description and website survive `Store.update/2` then `Store.load/1`.
+- [!] Delete the stray `lib/nugitea/router.ex.backup`, and save each repo's `description` and `website` in accounts.json (`Nugitea.Accounts.Store.encode/1` and `decode/1`, defaulting to "" when missing). Test that a repo's description and website survive `Store.update/2` then `Store.load/1`.
 - [ ] Give pull requests Gitea-style numbers: replace the timestamp `id` in `Directory.create_pull_request` with `number`, the next integer in that repo starting at 1, and save `pull_requests` in accounts.json (`Store.encode/1` and `decode/1`, dates as ISO 8601 strings). Test the numbering (1 then 2 in one repo, 1 in another) and that pull requests survive a save and load.
 
 ### API foundation
