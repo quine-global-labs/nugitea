@@ -361,4 +361,34 @@ defmodule Nugitea.StorageTest do
     # Test that nonexistent branch returns error
     assert {:error, :not_found} = Storage.branch("alice/demo", "nonexistent")
   end
+
+  test "create_branch/3 creates a new branch from existing reference", %{tmp_dir: root} do
+    # Create a bare repository
+    assert Storage.init_bare("alice/demo") == :ok
+
+    # Create temp git repo to populate commits 
+    tmp_git_dir = Path.join(root, "tmp_git")
+    File.mkdir_p!(tmp_git_dir)
+
+    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
+
+    # Create a commit
+    File.write!(tmp_git_dir <> "/file.txt", "content 1")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Initial commit"], cd: tmp_git_dir)
+
+    # Push to the bare repo
+    bare_path = Path.join(root, "alice/demo.git")
+    System.cmd("git", ["remote", "add", "origin", bare_path], cd: tmp_git_dir)
+    System.cmd("git", ["push", "origin", "main"], cd: tmp_git_dir)
+
+    # Create a new branch from the main branch - use a valid name first
+    assert Storage.create_branch("alice/demo", "feature-branch", "main") == :ok
+
+    # Verify the branch was created
+    assert {:ok, branches} = Storage.branches("alice/demo")
+    assert "feature-branch" in branches
+  end
 end

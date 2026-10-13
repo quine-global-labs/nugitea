@@ -458,5 +458,26 @@ defmodule Nugitea.Storage do
     end
   end
 
+  @doc """
+  Creates a new branch in repository.
+
+  Checks that the branch name is valid using git check-ref-format --branch.
+  The branch will be created from an existing reference (from_ref).
+  """
+  def create_branch(path, name, from_ref) do
+    with {:ok, dir} <- existing(path),
+         :ok <- check_ref_format(name),
+         {:ok, _out} <- capture(dir, ["update-ref", "refs/heads/#{name}", from_ref]) do
+      :ok
+    end
+  end
+
+  defp check_ref_format(name) do
+    case System.cmd("git", ["check-ref-format", "--branch", name]) do
+      {_, 0} -> :ok
+      {_, _} -> {:error, "invalid branch name #{inspect(name)}"}
+    end
+  end
+
   defp root, do: Application.fetch_env!(:nugitea, :repo_root)
 end
