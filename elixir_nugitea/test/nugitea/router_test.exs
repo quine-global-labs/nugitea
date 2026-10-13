@@ -100,4 +100,11 @@ defmodule Nugitea.RouterTest do
 
     assert result.status == 404
   end
+
+  test "repos/:owner/:repo/topics with unknown repo returns 404" do
+    conn = :get |> Plug.Test.conn("/repos/unknown/repo/topics")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 404
+  end
 end

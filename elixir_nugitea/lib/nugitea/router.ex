@@ -169,6 +169,35 @@ defmodule Nugitea.Router do
     end
   end
 
+  get "/repos/:owner/:repo/topics" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+
+    if owner != nil and repo != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        repo_id ->
+          # Get repository information from accounts directory
+          repo_info = dir.repos[repo_id]
+
+          if repo_info == nil do
+            send_resp(conn, 404, "not found")
+          else
+            # Return the topics as a JSON array of strings
+            conn
+            |> put_resp_content_type("application/json")
+            |> send_resp(200, Jason.encode!(repo_info.topics))
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   get "/*glob" do
     conn = fetch_query_params(conn)
 
