@@ -65,7 +65,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 
 ### Access control
 
-- [ ] Add `Nugitea.Auth.Directory` (`@behaviour Nugitea.Auth`): `allow_pull?(user, repo_path)` loads accounts.json, resolves the repo with `Directory.resolve_repo/2` and is true when `Directory.effective_role/3` isn't nil; `allow_push?(user, repo_path)` is true for `:write` and above. Test a public repo, a private one, its owner and a stranger. Don't make it the default yet.
+- [x] Add `Nugitea.Auth.Directory` (`@behaviour Nugitea.Auth`): `allow_pull?(user, repo_path)` loads accounts.json, resolves the repo with `Directory.resolve_repo/2` and is true when `Directory.effective_role/3` isn't nil; `allow_push?(user, repo_path)` is true for `:write` and above. Test a public repo, a private one, its owner and a stranger. Don't make it the default yet.
 - [ ] Pass the user through `Nugitea.Auth`: make `allow?/2` `allow?(service, user, repo)`, and have `Nugitea.Router`'s git routes read basic auth (the token as the password, via `Tokens.lookup_token/2`) and pass the user id: nil without a header, 401 with `WWW-Authenticate: Basic realm="nugitea"` for a bad token. The SSH caller passes nil for now. Test the router with a good and a bad token.
 - [ ] In `Nugitea.SSH`, pass the user whose key authenticated the session to `Nugitea.Auth.allow?/3` instead of nil, keeping that user in the connection's state. Test the lookup from key to user.
 - [ ] Make `Nugitea.Auth.Directory` the default authorizer, keeping `AllowAll` in the test config only where tests need it. When an anonymous git HTTP request is denied, answer 401 with `WWW-Authenticate` so git asks for credentials. Test `info/refs` for a private repo anonymously (401) and with a token (200).
