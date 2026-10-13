@@ -1013,6 +1013,88 @@ defmodule Nugitea.Router do
     end
   end
 
+  # List all branches in a repository  
+  get "/api/v1/repos/:owner/:repo/branches" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+
+    if owner != nil and repo != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        _repo_id ->
+          # Get repository path for storage access  
+          repo_path = "#{owner}/#{repo}"
+
+          case Client.branch_tips(repo_path) do
+            {:ok, tips} ->
+              branches =
+                for tip <- tips do
+                  [refname, commit_hash, subject] = String.split(tip, " ", parts: 3)
+
+                  # Extract just the branch name from refname (refs/heads/branch-name -> branch-name)
+                  branch_name = String.replace_prefix(refname, "refs/heads/", "")
+
+                  %{
+                    name: branch_name,
+                    commit: %{
+                      id: commit_hash,
+                      message: subject
+                    }
+                  }
+                end
+
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(200, Jason.encode!(branches))
+
+            {:error, _} ->
+              send_resp(conn, 404, "not found")
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
+  # Get a specific branch from a repository  
+  get "/api/v1/repos/:owner/:repo/branches/:branch" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+    branch_name = conn.params["branch"]
+
+    if owner != nil and repo != nil and branch_name != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        _repo_id ->
+          # Get repository path for storage access  
+          repo_path = "#{owner}/#{repo}"
+
+          case Client.branch(repo_path, branch_name) do
+            {:ok, branch_data} ->
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(200, Jason.encode!(branch_data))
+
+            {:error, :not_found} ->
+              send_resp(conn, 404, "not found")
+
+            {:error, _} ->
+              send_resp(conn, 404, "not found")
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   get "/*glob" do
     conn = fetch_query_params(conn)
 

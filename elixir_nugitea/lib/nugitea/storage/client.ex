@@ -25,6 +25,8 @@ defmodule Nugitea.Storage.Client do
   def commits(path, ref, opts), do: call(:commits, [path, ref, opts])
   def commit_diff(path, sha), do: call(:commit_diff, [path, sha])
   def commit_patch(path, sha), do: call(:commit_patch, [path, sha])
+  def branch_tips(path), do: call(:branch_tips, [path])
+  def branch(path, branch_name), do: call(:branch, [path, branch_name])
 
   @doc """
   Resolves client-supplied wire form (`ACME/platform/api.git`) against the

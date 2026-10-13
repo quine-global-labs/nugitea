@@ -185,6 +185,44 @@ defmodule Nugitea.Storage do
     end
   end
 
+  @doc """
+  Returns branch tips for all branches including refname, objectname (commit hash) and subject.
+  Format matches git for-each-ref output with %(refname) %(objectname) %(subject).
+  """
+  def branch_tips(path) do
+    with {:ok, dir} <- existing(path),
+         {:ok, out} <-
+           capture(dir, [
+             "for-each-ref",
+             "--format=%(refname) %(objectname) %(subject)",
+             "refs/heads"
+           ]) do
+      {:ok, String.split(out, "\n", trim: true)}
+    end
+  end
+
+  @doc """
+  Gets branch data for a specific branch with name, commit hash and message.
+  """
+  def branch(path, branch_name) do
+    with {:ok, dir} <- existing(path),
+         {:ok, out} <-
+           capture(dir, [
+             "for-each-ref",
+             "--format=%(objectname) %(subject)",
+             "refs/heads/#{branch_name}"
+           ]) do
+      case String.split(out, "\n", trim: true) do
+        [line] when line != "" ->
+          [commit_hash, message] = String.split(line, " ", parts: 2)
+          {:ok, %{name: branch_name, commit: %{id: commit_hash, message: message}}}
+
+        _ ->
+          {:error, :not_found}
+      end
+    end
+  end
+
   @doc "One level of the tree at `ref:path` (or `ref`'s root): `%{name, kind, sha}`."
   def tree(path, ref, subpath) do
     treeish = if subpath == "", do: ref, else: "#{ref}:#{subpath}"

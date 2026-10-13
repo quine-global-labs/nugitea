@@ -301,4 +301,64 @@ defmodule Nugitea.StorageTest do
     assert is_binary(patch)
     assert String.contains?(patch, "From ")
   end
+
+  test "branch_tips/1 and branch/2 with a repository having multiple branches", %{tmp_dir: root} do
+    # Create a bare repository
+    assert Storage.init_bare("alice/demo") == :ok
+
+    # Create temp git repo to populate commits 
+    tmp_git_dir = Path.join(root, "tmp_git")
+    File.mkdir_p!(tmp_git_dir)
+
+    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
+
+    # Create first commit on main branch
+    File.write!(tmp_git_dir <> "/file1.txt", "content 1")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Initial commit"], cd: tmp_git_dir)
+
+    # Create a feature branch and add a commit
+    System.cmd("git", ["checkout", "-b", "feature-branch"], cd: tmp_git_dir)
+    File.write!(tmp_git_dir <> "/file2.txt", "content 2")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Add feature file"], cd: tmp_git_dir)
+
+    # Create another commit on main
+    System.cmd("git", ["checkout", "main"], cd: tmp_git_dir)
+    File.write!(tmp_git_dir <> "/file3.txt", "content 3")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Add main file"], cd: tmp_git_dir)
+
+    # Push to the bare repo
+    bare_path = Path.join(root, "alice/demo.git")
+    System.cmd("git", ["remote", "add", "origin", bare_path], cd: tmp_git_dir)
+    System.cmd("git", ["push", "origin", "main"], cd: tmp_git_dir)
+    System.cmd("git", ["push", "origin", "feature-branch"], cd: tmp_git_dir)
+
+    # Test branch_tips/1 returns tip information for all branches
+    assert {:ok, tips} = Storage.branch_tips("alice/demo")
+    assert length(tips) == 2
+
+    # Verify that both branches are present with their commits
+    branch_names =
+      Enum.map(tips, fn tip ->
+        [refname, _commit_hash, _subject] = String.split(tip, " ", parts: 3)
+        String.replace_prefix(refname, "refs/heads/", "")
+      end)
+
+    assert "main" in branch_names
+    assert "feature-branch" in branch_names
+
+    # Test single branch retrieval 
+    assert {:ok, %{name: "main", commit: %{id: _id, message: "Add main file"}}} =
+             Storage.branch("alice/demo", "main")
+
+    assert {:ok, %{name: "feature-branch", commit: %{id: _id, message: "Add feature file"}}} =
+             Storage.branch("alice/demo", "feature-branch")
+
+    # Test that nonexistent branch returns error
+    assert {:error, :not_found} = Storage.branch("alice/demo", "nonexistent")
+  end
 end
