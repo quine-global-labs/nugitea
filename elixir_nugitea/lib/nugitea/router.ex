@@ -1368,7 +1368,7 @@ defmodule Nugitea.Router do
   end
 
   defp allow(service, repo),
-    do: if(Nugitea.Auth.allow?(service, repo), do: :ok, else: {:error, 403, "forbidden"})
+    do: if(Nugitea.Auth.allow?(service, nil, repo), do: :ok, else: {:error, 403, "forbidden"})
 
   defp not_found, do: {:error, 404, "not found"}
 

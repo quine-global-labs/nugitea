@@ -9,8 +9,8 @@ defmodule Nugitea.Auth do
   @callback allow_pull?(user :: integer | nil, repo :: String.t()) :: boolean
   @callback allow_push?(user :: integer | nil, repo :: String.t()) :: boolean
 
-  def allow?("upload-pack", repo), do: impl().allow_pull?(nil, repo)
-  def allow?("receive-pack", repo), do: impl().allow_push?(nil, repo)
+  def allow?("upload-pack", user, repo), do: impl().allow_pull?(user, repo)
+  def allow?("receive-pack", user, repo), do: impl().allow_push?(user, repo)
   def allow_pull?(repo), do: impl().allow_pull?(nil, repo)
 
   defp impl, do: Application.get_env(:nugitea, :authorizer, Nugitea.Auth.AllowAll)
