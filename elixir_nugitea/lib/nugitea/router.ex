@@ -35,6 +35,35 @@ defmodule Nugitea.Router do
     |> send_resp(200, Jason.encode!(%{version: version}))
   end
 
+  get "/api/v1/user" do
+    # For now, we'll use a basic implementation to return user information
+    # In a full implementation with proper auth, this would check authentication
+    # This would be set based on authentication
+    user = nil
+
+    {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+    if user != nil do
+      # Find the user - in real implementation we would fetch by ID or slug
+      case D.account(dir, user) do
+        nil ->
+          send_resp(conn, 401, "unauthorized")
+
+        %{kind: :user, id: user_id, slug: user_slug} ->
+          conn
+          |> put_resp_content_type("application/json")
+          |> send_resp(200, Jason.encode!(%{id: user_id, login: user_slug}))
+
+        _ ->
+          # Not a user account
+          send_resp(conn, 401, "unauthorized")
+      end
+    else
+      # Anonymous - return 401
+      send_resp(conn, 401, "unauthorized")
+    end
+  end
+
   forward "/graphql",
     to: Absinthe.Plug.GraphiQL,
     init_opts: [schema: Nugitea.GraphQL.Schema, interface: :simple, json_codec: Jason]

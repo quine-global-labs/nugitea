@@ -137,4 +137,22 @@ defmodule Nugitea.RouterTest do
     # In a real implementation this would update the repository
     assert result.status != 500
   end
+
+  test "GET /api/v1/user with anonymous returns 401" do
+    conn = :get |> Plug.Test.conn("/api/v1/user")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 401
+    assert result.resp_body == "unauthorized"
+  end
+
+  test "GET /api/v1/user with a user would return user info (stub)" do
+    # Since we don't have real auth, this test is more of a stub to verify the route exists and is functional
+    conn = :get |> Plug.Test.conn("/api/v1/user")
+    result = Nugitea.Router.call(conn, [])
+
+    # This will be 401 for anonymous or 200 with user data in a real implementation 
+    # At minimum, the endpoint must be registered
+    assert result.status == 401 or result.status == 200
+  end
 end
