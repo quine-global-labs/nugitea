@@ -27,6 +27,14 @@ defmodule Nugitea.Router do
     send_resp(conn, 200, "ok")
   end
 
+  get "/api/v1/version" do
+    version = Application.spec(:nugitea, :vsn) |> to_string()
+
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(200, Jason.encode!(%{version: version}))
+  end
+
   forward "/graphql",
     to: Absinthe.Plug.GraphiQL,
     init_opts: [schema: Nugitea.GraphQL.Schema, interface: :simple, json_codec: Jason]
