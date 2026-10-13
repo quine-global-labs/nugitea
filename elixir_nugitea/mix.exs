@@ -13,7 +13,7 @@ defmodule Nugitea.MixProject do
 
   def application do
     [
-      extra_applications: [:logger, :ssh, :public_key, :crypto],
+      extra_applications: [:logger, :ssh, :public_key, :crypto, :inets, :ssl],
       mod: {Nugitea.Application, []}
     ]
   end
