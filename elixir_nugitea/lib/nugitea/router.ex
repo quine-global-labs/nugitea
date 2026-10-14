@@ -744,6 +744,285 @@ defmodule Nugitea.Router do
     end
   end
 
+  post "/api/v1/repos/:owner/:repo/forks" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+
+    if owner != nil and repo != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        source_repo_id ->
+          # Parse request body for optional organization and name parameters
+          case Plug.Conn.read_body(conn) do
+            {:ok, body, _conn} ->
+              params =
+                case Jason.decode(body) do
+                  {:ok, p} -> p
+                  {:error, _reason} -> %{}
+                end
+
+              # Get the source repository information
+              source_repo = dir.repos[source_repo_id]
+
+              if source_repo == nil do
+                send_resp(conn, 404, "not found")
+              else
+                # Process organization and name parameters if provided 
+                organization = Map.get(params, "organization")
+                name = Map.get(params, "name")
+
+                # Determine the fork owner - either use the organization parameter or the current user (anonymous)
+                fork_owner =
+                  case organization do
+                    nil ->
+                      # If no organization given, we'll assume it's just a personal fork 
+                      # The fork goes under the same account as the source (in this implementation just default to source)
+                      owner
+
+                    org when is_binary(org) ->
+                      org
+
+                    _ ->
+                      owner
+                  end
+
+                # Determine the fork name - either use name parameter or default to repo name
+                fork_name = if name && is_binary(name), do: name, else: repo
+
+                # Construct the fork path (owner/name format)
+                fork_path = "#{fork_owner}/#{fork_name}"
+
+                # Check that the fork path doesn't already exist as a repo 
+                existing_repo_id = D.resolve_repo(dir, fork_path)
+
+                if existing_repo_id != nil do
+                  send_resp(conn, 409, "repository already exists")
+                else
+                  case Client.fork("#{owner}/#{repo}", fork_path) do
+                    :ok ->
+                      # Return 202 with the new repository JSON (with fork: true and parent)
+                      response_data = %{
+                        id: source_repo_id,
+                        name: fork_name,
+                        full_name: fork_path,
+                        description: source_repo.description || "",
+                        empty: false,
+                        private: source_repo.visibility == :private,
+                        fork: true,
+                        template: false,
+                        parent: %{
+                          id: source_repo_id,
+                          name: repo,
+                          full_name: "#{owner}/#{repo}"
+                        },
+                        mirror: false,
+                        size: 0,
+                        language: nil,
+                        languages_url: "",
+                        html_url: "",
+                        url: "",
+                        ssh_url: "",
+                        clone_url: "",
+                        original_url: "",
+                        website: "",
+                        stars_count: 0,
+                        forks_count: 0,
+                        watchers_count: 0,
+                        branch_count: 0,
+                        open_issues_count: length(dir.pull_requests[source_repo_id] || []),
+                        open_pr_counter: length(dir.pull_requests[source_repo_id] || []),
+                        release_counter: 0,
+                        default_branch: "main",
+                        created_at: DateTime.utc_now(),
+                        updated_at: DateTime.utc_now(),
+                        permissions: %{
+                          # For now we'll set this conservatively
+                          admin: false,
+                          push: false,
+                          pull: true
+                        },
+                        has_code: true,
+                        has_issues: false,
+                        internal_tracker: nil,
+                        external_tracker: nil,
+                        has_wiki: false,
+                        external_wiki: nil,
+                        has_pull_requests: true,
+                        has_projects: false,
+                        projects_mode: "repo",
+                        has_releases: false,
+                        has_packages: false,
+                        has_actions: false,
+                        ignore_whitespace_conflicts: false,
+                        allow_merge_commits: true,
+                        allow_rebase: true,
+                        allow_rebase_explicit: true,
+                        allow_squash_merge: true,
+                        allow_fast_forward_only_merge: false,
+                        allow_merge_update: false,
+                        allow_rebase_update: false,
+                        allow_manual_merge: true,
+                        autodetect_manual_merge: false,
+                        default_delete_branch_after_merge: false,
+                        default_merge_style: "merge",
+                        default_update_style: "merge",
+                        default_allow_maintainer_edit: false,
+                        avatar_url: "",
+                        internal: false,
+                        mirror_interval: "",
+                        object_format_name: "sha1",
+                        mirror_updated: DateTime.utc_now(),
+                        mirror_last_sync_at: DateTime.utc_now(),
+                        topics: source_repo.topics || [],
+                        licenses: []
+                      }
+
+                      conn
+                      |> put_resp_content_type("application/json")
+                      |> send_resp(202, Jason.encode!(response_data))
+
+                    {:error, reason} ->
+                      conn
+                      |> put_resp_content_type("application/json")
+                      |> send_resp(
+                        500,
+                        Jason.encode!(%{error: "Failed to create fork: #{reason}"})
+                      )
+                  end
+                end
+              end
+
+            {:error, reason} ->
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(500, Jason.encode!(%{error: "Failed to read request body: #{reason}"}))
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
+  get "/api/v1/repos/:owner/:repo/forks" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+
+    if owner != nil and repo != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        source_repo_id ->
+          # Get all repositories in the directory
+          all_repos = D.repos(dir)
+
+          # Filter forked repositories (those with parent pointing to this repo)
+          forks =
+            Enum.filter(all_repos, fn repo_info ->
+              # Check if this repository is a fork of the specified source
+              Map.has_key?(repo_info, :parent) &&
+                repo_info.parent &&
+                case repo_info.parent do
+                  %{id: parent_id} -> parent_id == source_repo_id
+                  _ -> false
+                end
+            end)
+
+          # Create response with fork information
+          fork_data =
+            Enum.map(forks, fn repo_info ->
+              %{
+                id: repo_info.id,
+                name: repo_info.slug,
+                full_name: "#{repo_info.owner}/#{repo_info.slug}",
+                description: repo_info.description || "",
+                empty: false,
+                private: repo_info.visibility == :private,
+                fork: true,
+                template: false,
+                parent: %{
+                  id: source_repo_id,
+                  name: repo,
+                  full_name: "#{owner}/#{repo}"
+                },
+                mirror: false,
+                size: 0,
+                language: nil,
+                languages_url: "",
+                html_url: "",
+                url: "",
+                ssh_url: "",
+                clone_url: "",
+                original_url: "",
+                website: "",
+                stars_count: 0,
+                forks_count: 0,
+                watchers_count: 0,
+                branch_count: 0,
+                open_issues_count: length(dir.pull_requests[repo_info.id] || []),
+                open_pr_counter: length(dir.pull_requests[repo_info.id] || []),
+                release_counter: 0,
+                default_branch: "main",
+                created_at: DateTime.utc_now(),
+                updated_at: DateTime.utc_now(),
+                permissions: %{
+                  # For now we'll set this conservatively
+                  admin: false,
+                  push: false,
+                  pull: true
+                },
+                has_code: true,
+                has_issues: false,
+                internal_tracker: nil,
+                external_tracker: nil,
+                has_wiki: false,
+                external_wiki: nil,
+                has_pull_requests: true,
+                has_projects: false,
+                projects_mode: "repo",
+                has_releases: false,
+                has_packages: false,
+                has_actions: false,
+                ignore_whitespace_conflicts: false,
+                allow_merge_commits: true,
+                allow_rebase: true,
+                allow_rebase_explicit: true,
+                allow_squash_merge: true,
+                allow_fast_forward_only_merge: false,
+                allow_merge_update: false,
+                allow_rebase_update: false,
+                allow_manual_merge: true,
+                autodetect_manual_merge: false,
+                default_delete_branch_after_merge: false,
+                default_merge_style: "merge",
+                default_update_style: "merge",
+                default_allow_maintainer_edit: false,
+                avatar_url: "",
+                internal: false,
+                mirror_interval: "",
+                object_format_name: "sha1",
+                mirror_updated: DateTime.utc_now(),
+                mirror_last_sync_at: DateTime.utc_now(),
+                topics: repo_info.topics || [],
+                licenses: []
+              }
+            end)
+
+          conn
+          |> put_resp_content_type("application/json")
+          |> send_resp(200, Jason.encode!(fork_data))
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   patch "/repos/:owner/:repo" do
     owner = conn.params["owner"]
     repo = conn.params["repo"]
