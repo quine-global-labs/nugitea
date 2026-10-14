@@ -64,6 +64,122 @@ defmodule Nugitea.Router do
     end
   end
 
+  get "/api/v1/user/blocks" do
+    # Get the current user from the connection assigns
+    user_id = Map.get(conn.assigns, :user_id, nil)
+
+    if user_id == nil do
+      send_resp(conn, 401, "unauthorized")
+    else
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      # Get all accounts that this user has blocked
+      blocked_accounts =
+        for {blocker, blocked} <- dir.blocks, blocker == user_id do
+          blocked
+        end
+        |> Enum.map(fn blocked_id ->
+          case D.account(dir, blocked_id) do
+            %{kind: :user, slug: user_slug} -> %{login: user_slug}
+            # Skip non-user accounts
+            _ -> nil
+          end
+        end)
+        |> Enum.reject(&is_nil/1)
+
+      conn
+      |> put_resp_content_type("application/json")
+      |> send_resp(200, Jason.encode!(blocked_accounts))
+    end
+  end
+
+  put "/api/v1/user/blocks/:username" do
+    # Get the current user from the connection assigns  
+    user_id = Map.get(conn.assigns, :user_id, nil)
+    username = conn.params["username"]
+
+    if user_id == nil or username == nil do
+      send_resp(conn, 401, "unauthorized")
+    else
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      # Find the blocked user account by slug
+      blocked_account_id = D.resolve(dir, username)
+
+      case D.account(dir, blocked_account_id) do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        %{kind: :user} = blocked_user ->
+          # Check if the current user is trying to block themselves 
+          if user_id == blocked_user.id do
+            send_resp(conn, 400, "cannot block yourself")
+          else
+            # Attempt to block the user
+            case Accounts.Store.update(
+                   Accounts.state_dir(),
+                   &D.block(&1, user_id, blocked_user.id)
+                 ) do
+              {:ok, _} ->
+                conn
+                |> put_resp_content_type("application/json")
+                |> send_resp(200, "{}")
+
+              {:error, reason} ->
+                conn
+                |> put_resp_content_type("application/json")
+                |> send_resp(400, Jason.encode!(%{error: reason}))
+            end
+          end
+
+        _ ->
+          # If it's not a user account, return 404 
+          send_resp(conn, 404, "not found")
+      end
+    end
+  end
+
+  delete "/api/v1/user/blocks/:username" do
+    # Get the current user from the connection assigns  
+    user_id = Map.get(conn.assigns, :user_id, nil)
+    username = conn.params["username"]
+
+    if user_id == nil or username == nil do
+      send_resp(conn, 401, "unauthorized")
+    else
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      # Find the blocked user account by slug
+      blocked_account_id = D.resolve(dir, username)
+
+      case D.account(dir, blocked_account_id) do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        %{kind: :user} = blocked_user ->
+          # Attempt to unblock the user 
+          case Accounts.Store.update(
+                 Accounts.state_dir(),
+                 &D.unblock(&1, user_id, blocked_user.id)
+               ) do
+            {:ok, _} ->
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(204, "")
+
+            {:error, reason} ->
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(400, Jason.encode!(%{error: reason}))
+          end
+
+        _ ->
+          # If it's not a user account, return 404 
+          send_resp(conn, 404, "not found")
+      end
+    end
+  end
+
   get "/api/v1/users/:username" do
     username = conn.params["username"]
 
