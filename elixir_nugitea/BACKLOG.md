@@ -73,7 +73,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 
 ### Repo settings
 
-- [ ] Manage topics like Gitea: `PUT /api/v1/repos/:owner/:repo/topics` (`{"topics": [...]}` replaces them), `PUT .../topics/:topic` and `DELETE .../topics/:topic`, checking each topic as Gitea does (lowercase letters, digits and dashes, starting with a letter or digit, at most 35 characters; at most 25 topics; 422 otherwise). Test valid, invalid and too many topics.
+- [!] Manage topics like Gitea: `PUT /api/v1/repos/:owner/:repo/topics` (`{"topics": [...]}` replaces them), `PUT .../topics/:topic` and `DELETE .../topics/:topic`, checking each topic as Gitea does (lowercase letters, digits and dashes, starting with a letter or digit, at most 35 characters; at most 25 topics; 422 otherwise). Test valid, invalid and too many topics.
 - [ ] Add collaborators: `GET /api/v1/repos/:owner/:repo/collaborators` (users with a direct grant on the repo), `PUT .../collaborators/:user` (`{"permission": "read" | "write" | "admin"}`, via `Directory.grant/4`), `DELETE .../collaborators/:user` (`Directory.revoke/3`) and `GET .../collaborators/:user/permission`. Changing them needs admin. Test add, list, permission and remove.
 - [ ] Rename a repo with `PATCH /api/v1/repos/:owner/:repo` (`{"name": NEW}`): `Directory.rename_repo(dir, repo_id, slug)` (checked with `Nugitea.Names`; 409 when the name is taken) and `Storage.rename(from, to)` with a `Client` wrapper. Test the directory part, the storage part and the PATCH.
 - [ ] Transfer a repo with `POST /api/v1/repos/:owner/:repo/transfer` (`{"new_owner": LOGIN}`): `Directory.transfer_repo(dir, repo_id, owner_id)` and `Storage.rename/2`. It needs admin on the repo, and ownership of the target when that's an org. Test it.
