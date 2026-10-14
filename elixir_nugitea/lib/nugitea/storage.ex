@@ -331,6 +331,30 @@ defmodule Nugitea.Storage do
   end
 
   @doc """
+  Forks a repository by cloning it in bare mode. Takes the source repo path and 
+  creates a new one at dest path with a git clone --bare --no-local.
+  Sets up the hooks like init_bare does.
+  """
+  def fork(src, dest) do
+    with {:ok, src_dir} <- dir(src),
+         {:ok, dest_dir} <- dir(dest) do
+      if File.dir?(dest_dir) do
+        {:error, "repo #{inspect(dest)} already exists"}
+      else
+        # Clone the repository with --bare --no-local options
+        case System.cmd("git", ["clone", "--bare", "--no-local", src_dir, dest_dir]) do
+          {_, 0} ->
+            install_hooks(dest_dir)
+            :ok
+
+          {out, status} ->
+            {:error, "git clone exited #{status}: #{String.trim(out)}"}
+        end
+      end
+    end
+  end
+
+  @doc """
   Returns the size of a repository in KiB, using `git count-objects -v`.
   The result is the sum of `size` and `size-pack` from git count-objects.
   """

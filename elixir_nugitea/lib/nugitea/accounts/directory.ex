@@ -344,7 +344,8 @@ defmodule Nugitea.Accounts.Directory do
          owner: owner,
          slug: slug,
          visibility: visibility,
-         topics: []
+         topics: [],
+         fork_of: nil
        }), id}
     end
   end

@@ -521,4 +521,59 @@ defmodule Nugitea.StorageTest do
     # Test archive with a non-existent ref returns error
     assert {:error, _} = Storage.archive("alice/demo", "nonexistent-ref", "zip")
   end
+
+  test "fork/2 creates a bare clone and installs hooks", %{tmp_dir: root} do
+    # Create a source repository  
+    assert Storage.init_bare("alice/source") == :ok
+
+    # Initialize a git repo in the temp directory to add content
+    tmp_git_dir = Path.join(root, "tmp_git")
+    File.mkdir_p!(tmp_git_dir)
+
+    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
+    System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
+
+    # Create and commit some content
+    File.write!(tmp_git_dir <> "/file.txt", "Hello from source")
+    System.cmd("git", ["add", "."], cd: tmp_git_dir)
+    System.cmd("git", ["commit", "-m", "Initial commit"], cd: tmp_git_dir)
+
+    # Push to the bare repo
+    bare_path = Path.join(root, "alice/source.git")
+    System.cmd("git", ["remote", "add", "origin", bare_path], cd: tmp_git_dir)
+    System.cmd("git", ["push", "origin", "main"], cd: tmp_git_dir)
+
+    # Test that we can fork it
+    assert Storage.fork("alice/source", "alice/forked") == :ok
+
+    # Verify the forked repo exists and has correct structure
+    assert Storage.exists?("alice/forked")
+
+    # Verify that the fork has the right hooks installed 
+    assert File.exists?(Path.join(root, "alice/forked.git/hooks/pre-receive"))
+    assert File.exists?(Path.join(root, "alice/forked.git/hooks/update"))
+    assert File.exists?(Path.join(root, "alice/forked.git/hooks/post-receive"))
+
+    # Verify that the fork has content from the source
+    assert {:ok, branches} = Storage.branches("alice/forked")
+    assert "main" in branches
+
+    # Make sure it's actually a separate repo with same content
+    assert {:ok, files1} = Storage.files("alice/source", "main")
+    assert {:ok, files2} = Storage.files("alice/forked", "main")
+    assert files1 == files2
+  end
+
+  test "fork/2 handles errors properly", %{tmp_dir: root} do
+    # Test forking non-existing repo 
+    assert {:error, _} = Storage.fork("alice/nonexistent", "alice/forked")
+
+    # Create a source repository
+    assert Storage.init_bare("alice/source") == :ok
+
+    # Try to fork to existing repo path
+    assert Storage.fork("alice/source", "alice/source") ==
+             {:error, "repo \"alice/source\" already exists"}
+  end
 end
