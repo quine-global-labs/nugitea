@@ -52,7 +52,9 @@ defmodule Nugitea.Accounts.Directory do
             # user_id -> [key_info] 
             user_keys: %{},
             # pull_requests: repo_id -> [pull_request]
-            pull_requests: %{}
+            pull_requests: %{},
+            # issues: repo_id -> [issue]  
+            issues: %{}
 
   def roles, do: @roles
   def visibilities, do: @visibilities
@@ -722,6 +724,73 @@ defmodule Nugitea.Accounts.Directory do
       updated_prs = [pr | prs]
 
       {:ok, put_in(dir.pull_requests[repo_id], updated_prs), pr.id}
+    end
+  end
+
+  @doc "Creates an issue"
+  def create_issue(dir, repo_id, title, body, author) do
+    with {:ok, _} <- fetch(dir.repos, repo_id, "repo") do
+      # Create the issue structure
+      issue = %{
+        id: "#{repo_id}-#{DateTime.utc_now() |> DateTime.to_unix()}",
+        title: title,
+        body: body,
+        author: author,
+        created_at: DateTime.utc_now(),
+        updated_at: DateTime.utc_now(),
+        state: :open,
+        closed_at: nil
+      }
+
+      # Add issue to the repo's issue list
+      issues = Map.get(dir.issues, repo_id, [])
+      updated_issues = [issue | issues]
+
+      {:ok, put_in(dir.issues[repo_id], updated_issues), issue.id}
+    end
+  end
+
+  @doc "Lists issues for a repository"
+  def list_issues(dir, repo_id) do
+    Map.get(dir.issues, repo_id, [])
+  end
+
+  @doc "Gets a specific issue by index (id)"
+  def get_issue(dir, repo_id, issue_id) do
+    issues = Map.get(dir.issues, repo_id, [])
+    Enum.find(issues, &(&1.id == issue_id))
+  end
+
+  @doc "Updates an issue"
+  def update_issue(dir, repo_id, issue_id, params) do
+    with {:ok, _} <- fetch(dir.repos, repo_id, "repo") do
+      issues = Map.get(dir.issues, repo_id, [])
+
+      # Find the issue to update
+      updated_issues =
+        Enum.map(issues, fn issue ->
+          if issue.id == issue_id do
+            updated_issue = %{
+              issue
+              | title: Map.get(params, "title", issue.title),
+                body: Map.get(params, "body", issue.body),
+                updated_at: DateTime.utc_now(),
+                state: Map.get(params, "state", issue.state),
+                closed_at:
+                  case {Map.get(params, "state"), issue.state} do
+                    {:closed, old_state} when old_state != :closed -> DateTime.utc_now()
+                    {:open, :closed} -> nil
+                    _ -> issue.closed_at
+                  end
+            }
+
+            updated_issue
+          else
+            issue
+          end
+        end)
+
+      {:ok, put_in(dir.issues[repo_id], updated_issues)}
     end
   end
 

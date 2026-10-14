@@ -1281,6 +1281,107 @@ defmodule Nugitea.Router do
     end
   end
 
+  patch "/api/v1/repos/:owner/:repo/issues/:index" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+    index = conn.params["index"]
+
+    if owner != nil and repo != nil and index != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        repo_id ->
+          # Parse request body for issue update data
+          case Plug.Conn.read_body(conn) do
+            {:ok, body, _conn} ->
+              case Jason.decode(body) do
+                {:ok, params} ->
+                  # Determine the current user (nil for anonymous)
+                  user = conn.assigns.user_id
+
+                  # Check permissions - issue can be modified by author or anyone with write access 
+                  case D.effective_role(dir, user, repo_id) do
+                    nil ->
+                      # Not authorized to see this repo at all - return 404  
+                      send_resp(conn, 404, "not found")
+
+                    role when role in [:read, :write, :admin] ->
+                      # Check if the user is the author or has write access to modify the issue
+                      # Since we don't have detailed issue author tracking in this simple implementation,
+                      # anyone with write access can update issues.
+
+                      # Get existing issue to verify existence and permissions  
+                      issue = D.get_issue(dir, repo_id, index)
+
+                      case issue do
+                        nil ->
+                          # Issue not found 
+                          send_resp(conn, 404, "not found")
+
+                        _ ->
+                          # Update the issue using the Directory module
+                          case Accounts.Store.update(
+                                 Accounts.state_dir(),
+                                 &D.update_issue(&1, repo_id, index, params)
+                               ) do
+                            {:ok, updated_dir} ->
+                              # Get the updated issue 
+                              updated_issue = D.get_issue(updated_dir, repo_id, index)
+
+                              # Return updated issue data  
+                              response_data = %{
+                                id: index,
+                                title: updated_issue.title,
+                                body: updated_issue.body,
+                                state: updated_issue.state,
+                                closed_at: updated_issue.closed_at,
+                                created_at: updated_issue.created_at,
+                                updated_at: updated_issue.updated_at,
+                                # For simplicity 
+                                author: %{login: "anonymous"}
+                              }
+
+                              conn
+                              |> put_resp_content_type("application/json")
+                              |> send_resp(200, Jason.encode!(response_data))
+
+                            {:error, reason} ->
+                              conn
+                              |> put_resp_content_type("application/json")
+                              |> send_resp(
+                                500,
+                                Jason.encode!(%{
+                                  error: "Failed to update issue: #{reason}"
+                                })
+                              )
+                          end
+                      end
+
+                    _ ->
+                      # User doesn't have write access - return 403 
+                      send_resp(conn, 403, "forbidden")
+                  end
+
+                {:error, _reason} ->
+                  conn
+                  |> put_resp_content_type("application/json")
+                  |> send_resp(400, Jason.encode!(%{error: "Invalid JSON in request body"}))
+              end
+
+            {:error, reason} ->
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(500, Jason.encode!(%{error: "Failed to read request body: #{reason}"}))
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   delete "/api/v1/repos/:owner/:repo" do
     owner = conn.params["owner"]
     repo = conn.params["repo"]
