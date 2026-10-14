@@ -770,6 +770,106 @@ defmodule Nugitea.Router do
     end
   end
 
+  get "/api/v1/repos/:owner/:repo/pulls" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+
+    if owner != nil and repo != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        repo_id ->
+          # Get state filter parameter (open|closed|all)
+          state = conn.params["state"] || "all"
+
+          # Get the pull requests for this repository
+          prs = D.list_pull_requests_with_state(dir, repo_id, state)
+
+          # Format PRs according to Gitea's PullRequest structure
+          formatted_prs =
+            Enum.map(prs, fn pr ->
+              %{
+                number: pr.id |> String.split("-") |> List.last() |> String.to_integer(),
+                title: pr.title,
+                body: pr.description || "",
+                state: Atom.to_string(pr.state),
+                user: %{login: "anonymous"},
+                head: %{
+                  ref: pr.head_branch,
+                  sha: D.get_branch_tip(dir, repo_id, pr.head_branch).sha
+                },
+                base: %{
+                  ref: pr.base_branch,
+                  sha: D.get_branch_tip(dir, repo_id, pr.base_branch).sha
+                },
+                merged: false,
+                created_at: DateTime.to_iso8601(pr.created_at)
+              }
+            end)
+
+          conn
+          |> put_resp_content_type("application/json")
+          |> send_resp(200, Jason.encode!(formatted_prs))
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
+  get "/api/v1/repos/:owner/:repo/pulls/:index" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+    index = conn.params["index"]
+
+    if owner != nil and repo != nil and index != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        repo_id ->
+          # Convert index to integer for lookup
+          pr_id = "#{repo_id}-#{index}"
+
+          # Get the specific pull request
+          case D.get_pull_request(dir, repo_id, pr_id) do
+            nil ->
+              send_resp(conn, 404, "pull request not found")
+
+            pr ->
+              # Format PR according to Gitea's PullRequest structure
+              formatted_pr = %{
+                number: index |> String.to_integer(),
+                title: pr.title,
+                body: pr.description || "",
+                state: Atom.to_string(pr.state),
+                user: %{login: "anonymous"},
+                head: %{
+                  ref: pr.head_branch,
+                  sha: D.get_branch_tip(dir, repo_id, pr.head_branch).sha
+                },
+                base: %{
+                  ref: pr.base_branch,
+                  sha: D.get_branch_tip(dir, repo_id, pr.base_branch).sha
+                },
+                merged: false,
+                created_at: DateTime.to_iso8601(pr.created_at)
+              }
+
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(200, Jason.encode!(formatted_pr))
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   post "/repos/:owner/:repo/pulls" do
     owner = conn.params["owner"]
     repo = conn.params["repo"]

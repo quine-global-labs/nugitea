@@ -805,6 +805,30 @@ defmodule Nugitea.Accounts.Directory do
     Enum.find(prs, &(&1.id == pr_id))
   end
 
+  @doc "Lists pull requests for a repository with optional state filter"
+  def list_pull_requests_with_state(dir, repo_id, state_filter \\ "all") do
+    prs = Map.get(dir.pull_requests, repo_id, [])
+
+    filtered_prs =
+      case state_filter do
+        "open" -> Enum.filter(prs, &(&1.state == :open))
+        "closed" -> Enum.filter(prs, &(&1.state == :closed))
+        _ -> prs
+      end
+
+    filtered_prs
+  end
+
+  @doc "Get branch tip information for a given branch"
+  def get_branch_tip(_dir, _repo_id, branch_name) do
+    # This would be implemented using Storage.branch_tips/1 or similar
+    # For now, we'll just return a fake structure compatible with the expected Gitea format
+    %{
+      ref: branch_name,
+      sha: "fake-sha-#{branch_name}"
+    }
+  end
+
   @doc "Updates repository properties like description and website"
   def update_repo(dir, repo_id, description, visibility, website) do
     with {:ok, _} <- fetch(dir.repos, repo_id, "repo") do
