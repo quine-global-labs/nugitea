@@ -79,7 +79,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 - [!] Transfer a repo with `POST /api/v1/repos/:owner/:repo/transfer` (`{"new_owner": LOGIN}`): `Directory.transfer_repo(dir, repo_id, owner_id)` and `Storage.rename/2`. It needs admin on the repo, and ownership of the target when that's an org. Test it.
 - [x] Add forks: `Storage.fork(src, dest)` (`git clone --bare --no-local`, then the hooks that `init_bare` installs) and a `fork_of` repo id on repos in the directory, saved in accounts.json. Test the storage part and the field's round trip. (API next.)
 - [x] Add `POST /api/v1/repos/:owner/:repo/forks` (optional `{"organization", "name"}`), creating a fork under the caller or the org with `Storage.fork/2` and answering 202 with the repo JSON (`fork: true`, `parent`: the source repo), and `GET .../forks`. Test both.
-- [ ] Add stars: `Nugitea.Stars` keeping `user_id -> [repo_id]` in stars.json in the state dir; `PUT` and `DELETE /api/v1/user/starred/:owner/:repo` (204), `GET /api/v1/user/starred/:owner/:repo` (204, or 404 when not starred), `GET /api/v1/repos/:owner/:repo/stargazers`, and `stars_count` in the repo JSON. Test them.
+- [!] Add stars: `Nugitea.Stars` keeping `user_id -> [repo_id]` in stars.json in the state dir; `PUT` and `DELETE /api/v1/user/starred/:owner/:repo` (204), `GET /api/v1/user/starred/:owner/:repo` (204, or 404 when not starred), `GET /api/v1/repos/:owner/:repo/stargazers`, and `stars_count` in the repo JSON. Test them.
 - [ ] Add `GET /api/v1/user/blocks`, `PUT /api/v1/user/blocks/:username` and `DELETE /api/v1/user/blocks/:username` (204), using the existing `Directory.block/3` and `Directory.unblock/3`. Test block, list and unblock.
 
 ### Issues
