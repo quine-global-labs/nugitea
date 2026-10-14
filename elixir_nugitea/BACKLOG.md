@@ -90,7 +90,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 - [!] Add issue comments: `GET` and `POST /api/v1/repos/:owner/:repo/issues/:index/comments`, and `PATCH` and `DELETE .../issues/comments/:id` (by the comment's author or a repo admin), with ids unique in the repo, as Gitea's `Comment` (modules/structs/issue_comment.go). Include `comments` (the count) in the issue JSON. Test them.
 - [!] Add repo labels: `Nugitea.Labels` (labels.json: per repo `%{id, name, color, description}`), `GET` and `POST /api/v1/repos/:owner/:repo/labels`, `PATCH` and `DELETE .../labels/:id`, as Gitea's `Label` (modules/structs/issue_label.go), accepting only `#rrggbb` colors (422 otherwise). Test them.
 - [!] Put labels on issues: `GET`, `POST` (adds) and `PUT` (replaces) `/api/v1/repos/:owner/:repo/issues/:index/labels` (`{"labels": [ids]}`), `DELETE .../issues/:index/labels/:id`, and `GET .../issues?labels=a,b` filtering by label names. Deleting a repo label removes it from its issues. Test them.
-- [ ] Add milestones: `GET` and `POST /api/v1/repos/:owner/:repo/milestones`, `GET`, `PATCH` and `DELETE .../milestones/:id` (`title, description, due_on, state`), as Gitea's `Milestone` (modules/structs/issue_milestone.go) with `open_issues` and `closed_issues` counts; an issue's `milestone` is set through the issue PATCH. Test them.
+- [!] Add milestones: `GET` and `POST /api/v1/repos/:owner/:repo/milestones`, `GET`, `PATCH` and `DELETE .../milestones/:id` (`title, description, due_on, state`), as Gitea's `Milestone` (modules/structs/issue_milestone.go) with `open_issues` and `closed_issues` counts; an issue's `milestone` is set through the issue PATCH. Test them.
 
 ### Pull requests
 
