@@ -819,6 +819,39 @@ defmodule Nugitea.Accounts.Directory do
     filtered_prs
   end
 
+  @doc "Updates a pull request"
+  def update_pull_request(dir, repo_id, pr_id, params) do
+    with {:ok, _} <- fetch(dir.repos, repo_id, "repo") do
+      prs = Map.get(dir.pull_requests, repo_id, [])
+
+      # Find the PR to update
+      updated_prs =
+        Enum.map(prs, fn pr ->
+          if pr.id == pr_id do
+            updated_pr = %{
+              pr
+              | title: Map.get(params, "title", pr.title),
+                description: Map.get(params, "body", pr.description),
+                updated_at: DateTime.utc_now(),
+                state:
+                  case Map.get(params, "state") do
+                    "open" -> :open
+                    "closed" -> :closed
+                    _ -> pr.state
+                  end,
+                base_branch: Map.get(params, "base", pr.base_branch)
+            }
+
+            updated_pr
+          else
+            pr
+          end
+        end)
+
+      {:ok, put_in(dir.pull_requests[repo_id], updated_prs)}
+    end
+  end
+
   @doc "Get branch tip information for a given branch"
   def get_branch_tip(_dir, _repo_id, branch_name) do
     # This would be implemented using Storage.branch_tips/1 or similar

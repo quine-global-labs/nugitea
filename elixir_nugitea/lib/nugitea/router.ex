@@ -870,6 +870,113 @@ defmodule Nugitea.Router do
     end
   end
 
+  patch "/api/v1/repos/:owner/:repo/pulls/:index" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+    index = conn.params["index"]
+
+    if owner != nil and repo != nil and index != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        repo_id ->
+          # Parse request body for PR update data  
+          case Plug.Conn.read_body(conn) do
+            {:ok, body, _conn} ->
+              case Jason.decode(body) do
+                {:ok, params} ->
+                  # Get the existing pull request to verify it exists and has access
+                  pr_id = "#{repo_id}-#{index}"
+                  pr = D.get_pull_request(dir, repo_id, pr_id)
+
+                  case pr do
+                    nil ->
+                      send_resp(conn, 404, "pull request not found")
+
+                    _ ->
+                      # Extract fields to be updated  
+                      title = Map.get(params, "title")
+                      description = Map.get(params, "body")
+                      state = Map.get(params, "state")
+                      base_branch = Map.get(params, "base")
+
+                      # Validate that at least one field is provided for update
+                      if title == nil and description == nil and state == nil and
+                           base_branch == nil do
+                        conn
+                        |> put_resp_content_type("application/json")
+                        |> send_resp(
+                          400,
+                          Jason.encode!(%{
+                            error:
+                              "At least one field (title, body, state, or base) must be provided"
+                          })
+                        )
+                      else
+                        # Update pull request information using Directory module
+                        case Accounts.Store.update(
+                               Accounts.state_dir(),
+                               &D.update_pull_request(&1, repo_id, pr_id, params)
+                             ) do
+                          {:ok, updated_dir} ->
+                            # If we reach here, the update was successful
+                            updated_pr = D.get_pull_request(updated_dir, repo_id, pr_id)
+
+                            formatted_pr = %{
+                              number: index |> String.to_integer(),
+                              title: updated_pr.title,
+                              body: updated_pr.description || "",
+                              state: Atom.to_string(updated_pr.state),
+                              user: %{login: "anonymous"},
+                              head: %{
+                                ref: updated_pr.head_branch,
+                                sha: D.get_branch_tip(dir, repo_id, updated_pr.head_branch).sha
+                              },
+                              base: %{
+                                ref: updated_pr.base_branch,
+                                sha: D.get_branch_tip(dir, repo_id, updated_pr.base_branch).sha
+                              },
+                              merged: false,
+                              created_at: DateTime.to_iso8601(updated_pr.created_at)
+                            }
+
+                            conn
+                            |> put_resp_content_type("application/json")
+                            |> send_resp(200, Jason.encode!(formatted_pr))
+
+                          {:error, reason} ->
+                            conn
+                            |> put_resp_content_type("application/json")
+                            |> send_resp(
+                              500,
+                              Jason.encode!(%{
+                                error: "Failed to update pull request: #{reason}"
+                              })
+                            )
+                        end
+                      end
+                  end
+
+                {:error, _reason} ->
+                  conn
+                  |> put_resp_content_type("application/json")
+                  |> send_resp(400, Jason.encode!(%{error: "Invalid JSON in request body"}))
+              end
+
+            {:error, reason} ->
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(500, Jason.encode!(%{error: "Failed to read request body: #{reason}"}))
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   post "/repos/:owner/:repo/pulls" do
     owner = conn.params["owner"]
     repo = conn.params["repo"]
@@ -1394,7 +1501,7 @@ defmodule Nugitea.Router do
           send_resp(conn, 404, "not found")
 
         repo_id ->
-          # Parse request body for issue update data
+          # Parse request body for issue/pull request update data
           case Plug.Conn.read_body(conn) do
             {:ok, body, _conn} ->
               case Jason.decode(body) do
@@ -1409,20 +1516,19 @@ defmodule Nugitea.Router do
                       send_resp(conn, 404, "not found")
 
                     role when role in [:read, :write, :admin] ->
-                      # Check if the user is the author or has write access to modify the issue
-                      # Since we don't have detailed issue author tracking in this simple implementation,
-                      # anyone with write access can update issues.
+                      # Check if it's an issue or a pull request by looking up both
+                      # Since they share the same numbering system, we check issues and PRs for the index
 
-                      # Get existing issue to verify existence and permissions  
                       issue = D.get_issue(dir, repo_id, index)
+                      pr = D.get_pull_request(dir, repo_id, "#{repo_id}-#{index}")
 
-                      case issue do
-                        nil ->
-                          # Issue not found 
+                      case {issue, pr} do
+                        {nil, nil} ->
+                          # Neither issue nor pull request exists with this index
                           send_resp(conn, 404, "not found")
 
-                        _ ->
-                          # Update the issue using the Directory module
+                        {_, _} when not is_nil(issue) ->
+                          # Update the issue since it was found
                           case Accounts.Store.update(
                                  Accounts.state_dir(),
                                  &D.update_issue(&1, repo_id, index, params)
@@ -1458,6 +1564,60 @@ defmodule Nugitea.Router do
                                 })
                               )
                           end
+
+                        {_, _} when not is_nil(pr) ->
+                          # Update the pull request since it was found
+                          case Accounts.Store.update(
+                                 Accounts.state_dir(),
+                                 &D.update_pull_request(
+                                   &1,
+                                   repo_id,
+                                   "#{repo_id}-#{index}",
+                                   params
+                                 )
+                               ) do
+                            {:ok, updated_dir} ->
+                              # Get the updated pull request 
+                              updated_pr =
+                                D.get_pull_request(updated_dir, repo_id, "#{repo_id}-#{index}")
+
+                              # Return updated PR data  
+                              response_data = %{
+                                number: index,
+                                title: updated_pr.title,
+                                body: updated_pr.description || "",
+                                state: Atom.to_string(updated_pr.state),
+                                user: %{login: "anonymous"},
+                                head: %{
+                                  ref: updated_pr.head_branch,
+                                  sha: D.get_branch_tip(dir, repo_id, updated_pr.head_branch).sha
+                                },
+                                base: %{
+                                  ref: updated_pr.base_branch,
+                                  sha: D.get_branch_tip(dir, repo_id, updated_pr.base_branch).sha
+                                },
+                                merged: false,
+                                created_at: DateTime.to_iso8601(updated_pr.created_at)
+                              }
+
+                              conn
+                              |> put_resp_content_type("application/json")
+                              |> send_resp(200, Jason.encode!(response_data))
+
+                            {:error, reason} ->
+                              conn
+                              |> put_resp_content_type("application/json")
+                              |> send_resp(
+                                500,
+                                Jason.encode!(%{
+                                  error: "Failed to update pull request: #{reason}"
+                                })
+                              )
+                          end
+
+                        _ ->
+                          # Default case, though the match above should have caught all valid cases
+                          send_resp(conn, 404, "not found")
                       end
 
                     _ ->

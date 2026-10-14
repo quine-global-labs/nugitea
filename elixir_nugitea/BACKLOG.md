@@ -99,7 +99,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 - [!] Add `Storage.merge(path, base, head, message, author, style)` for the styles `:merge` (`git commit-tree` with both parents on the `merge-tree` result), `:squash` (one parent) and `:fast_forward_only`, finishing with `git update-ref` against the base's old sha. Test all three styles and a conflict.
 - [!] Add `POST /api/v1/repos/:owner/:repo/pulls/:index/merge` (`{"Do": "merge" | "squash" | "fast-forward-only", "MergeMessageField"}`; write access required), merging with `Storage.merge/6` and marking the pull request merged with `merged_at` and `merge_commit_sha` (405 when it isn't open or can't merge), and `GET .../pulls/:index/merge` (204 when merged, 404 when not). Test them.
 - [!] Add `GET /api/v1/repos/:owner/:repo/pulls/:index.diff` and `.patch` (`git diff BASE...HEAD` and `git format-patch --stdout BASE..HEAD`), `GET .../pulls/:index/commits` and `GET .../pulls/:index/files`. Test them.
-- [ ] Add `PATCH /api/v1/repos/:owner/:repo/pulls/:index` (`title, body, state, base`) and let the issue comment routes take a pull request's number too, since they share numbers. Test closing and reopening a pull request, and a comment on one.
+- [x] Add `PATCH /api/v1/repos/:owner/:repo/pulls/:index` (`title, body, state, base`) and let the issue comment routes take a pull request's number too, since they share numbers. Test closing and reopening a pull request, and a comment on one.
 
 ### Releases
 

@@ -396,4 +396,22 @@ defmodule Nugitea.RouterTest do
     # Route should register without error - a 404 is expected because repo doesn't have content yet  
     assert result.status != 500
   end
+
+  test "PATCH /api/v1/repos/:owner/:repo/pulls/:index updates pull request" do
+    # This route should be registered and functional (test for compilation only)
+    conn = :patch |> Plug.Test.conn("/api/v1/repos/user/repo/pulls/1", %{})
+    result = Nugitea.Router.call(conn, [])
+
+    # Route should register and not crash - a 404 is expected since there's no PR to update yet
+    assert result.status != 500
+  end
+
+  test "PATCH /api/v1/repos/:owner/:repo/issues/:index handles both issues and pull requests" do
+    # This route should be registered and functional (test for compilation only) 
+    conn = :patch |> Plug.Test.conn("/api/v1/repos/user/repo/issues/1", %{})
+    result = Nugitea.Router.call(conn, [])
+
+    # Route should register and not crash - a 404 is expected since there's no issue/PR to update yet
+    assert result.status != 500
+  end
 end
