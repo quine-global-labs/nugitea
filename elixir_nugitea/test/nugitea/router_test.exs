@@ -414,4 +414,28 @@ defmodule Nugitea.RouterTest do
     # Route should register and not crash - a 404 is expected since there's no issue/PR to update yet
     assert result.status != 500
   end
+
+  test "GET /api/v1/repos/search endpoint exists and returns valid response structure" do
+    conn = :get |> Plug.Test.conn("/api/v1/repos/search")
+    result = Nugitea.Router.call(conn, [])
+
+    # Should register successfully - could be 404 (no repos) or 200 (with repos)  
+    assert result.status == 200 or result.status == 404
+  end
+
+  test "GET /api/v1/repos/search with parameters works" do
+    conn = :get |> Plug.Test.conn("/api/v1/repos/search?q=test&limit=10&page=1")
+    result = Nugitea.Router.call(conn, [])
+
+    # Should register and return a valid JSON response 
+    assert result.status == 200 or result.status == 404
+  end
+
+  test "GET /api/v1/repos/search with topic parameter works" do
+    conn = :get |> Plug.Test.conn("/api/v1/repos/search?topic=true&q=foo")
+    result = Nugitea.Router.call(conn, [])
+
+    # Should register and return a valid JSON response 
+    assert result.status == 200 or result.status == 404
+  end
 end

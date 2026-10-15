@@ -1693,8 +1693,42 @@ defmodule Nugitea.Router do
   end
 
   get "/api/v1/repos/search" do
-    # Get query parameters
+    # Get query parameters - from Gitea's API specification
     q = conn.params["q"] || ""
+    topic_only = conn.params["topic"] == "true"
+    include_desc = conn.params["includeDesc"] == "true"
+
+    uid =
+      case conn.params["uid"] do
+        nil -> nil
+        val -> String.to_integer(val)
+      end
+
+    _priority_owner_id =
+      case conn.params["priority_owner_id"] do
+        nil -> nil
+        val -> String.to_integer(val)
+      end
+
+    team_id =
+      case conn.params["team_id"] do
+        nil -> nil
+        val -> String.to_integer(val)
+      end
+
+    starred_by =
+      case conn.params["starredBy"] do
+        nil -> nil
+        val -> String.to_integer(val)
+      end
+
+    exclusive = conn.params["exclusive"] == "true"
+
+    page =
+      case conn.params["page"] do
+        nil -> 1
+        val -> String.to_integer(val)
+      end
 
     limit =
       case conn.params["limit"] do
@@ -1711,33 +1745,97 @@ defmodule Nugitea.Router do
     # Filter accessible repos based on effective access for current caller
     caller_id = Map.get(conn.assigns, :user_id, nil)
 
-    accessible_repos =
+    # Apply filters based on the parameters (similar to Gitea's logic)
+    filtered_repos =
       Enum.filter(all_repos, fn repo ->
+        # Check if user is allowed to see this repository 
         D.effective_role(dir, caller_id, repo.id) != nil
       end)
 
-    # Search repositories by keyword in name and description
+    # Apply keyword search based on parameters 
     search_result =
       if q == "" do
-        accessible_repos
+        filtered_repos
       else
-        Enum.filter(accessible_repos, fn repo ->
-          # Check if the query matches either the repo name or description (case-insensitive)
-          name_match = String.contains?(String.downcase(repo.slug), String.downcase(q))
+        Enum.filter(filtered_repos, fn repo ->
+          # If topic_only is true, only search topics
+          if topic_only do
+            # Check if any of the repo's topics contain the query (case insensitive)
+            Enum.any?(repo.topics || [], fn topic ->
+              String.contains?(String.downcase(topic), String.downcase(q))
+            end)
+          else
+            # Regular search - check name OR description (based on include_desc flag)
+            name_match = String.contains?(String.downcase(repo.slug), String.downcase(q))
 
-          desc_match =
-            String.contains?(String.downcase(repo.description || ""), String.downcase(q))
+            desc_match =
+              if include_desc do
+                String.contains?(String.downcase(repo.description || ""), String.downcase(q))
+              else
+                false
+              end
 
-          name_match or desc_match
+            name_match or desc_match
+          end
         end)
       end
 
-    # Apply limit
-    filtered_repos = Enum.take(search_result, limit)
+    # Filter by user ID if provided  
+    search_result =
+      if uid != nil do
+        Enum.filter(search_result, fn repo ->
+          # If exclusive mode, filter repositories owned by the user
+          if exclusive do
+            repo.owner == uid
+          else
+            # Non-exclusive - include repositories where user is a collaborator or owner
+            role = D.effective_role(dir, uid, repo.id)
+            role != nil
+          end
+        end)
+      else
+        search_result
+      end
+
+    # Filter by team ID if provided 
+    search_result =
+      if team_id != nil do
+        Enum.filter(search_result, fn _repo ->
+          # Check if repository belongs to the team (simplified approach)
+          # This requires looking at team member relationships and how teams are associated with repos
+          # Simplified for now - in real implementation would check teams associations
+          false
+        end)
+      else
+        search_result
+      end
+
+    # Filter by starred by user if provided
+    search_result =
+      if starred_by != nil do
+        Enum.filter(search_result, fn _repo ->
+          # Would check if repository is starred by the specific user 
+          # Simplified for now 
+          false
+        end)
+      else
+        search_result
+      end
+
+    # Sort results (default is by name alphabetical, but we'll match Gitea's logic)
+    sorted_repos =
+      Enum.sort_by(search_result, fn repo ->
+        # Default sort order - this is basic; a full implementation would parse sort parameters
+        repo.slug
+      end)
+
+    # Apply pagination
+    offset = (page - 1) * limit
+    paginated_repos = Enum.drop(sorted_repos, offset) |> Enum.take(limit)
 
     # Format response according to Gitea's repository structure  
     formatted_repos =
-      Enum.map(filtered_repos, fn repo ->
+      Enum.map(paginated_repos, fn repo ->
         owner_account = D.account(dir, repo.owner)
         owner_slug = if owner_account, do: owner_account.slug, else: "unknown"
 
