@@ -13,6 +13,11 @@ defmodule Nugitea.GraphQLTest do
     Application.put_env(:nugitea, :state_dir, tmp)
     on_exit(fn -> Application.put_env(:nugitea, :state_dir, previous) end)
 
+    # These tests are about the schema's shape, so they see every repo; the
+    # last one checks visibility under the default authorizer.
+    Application.put_env(:nugitea, :authorizer, Nugitea.Auth.AllowAll)
+    on_exit(fn -> Application.delete_env(:nugitea, :authorizer) end)
+
     :ok =
       Nugitea.Accounts.Store.update(tmp, fn d ->
         {:ok, d, _} = D.add_user(d, "alice")
@@ -116,5 +121,32 @@ defmodule Nugitea.GraphQLTest do
     if File.exists?(frontend) do
       assert File.read!(frontend) == File.read!(Path.expand("../../priv/schema.graphql", __DIR__))
     end
+  end
+
+  test "over HTTP, a JSON POST like the web frontend sends" do
+    body =
+      Jason.encode!(%{
+        query: "query ($l: String!) { repositoryOwner(login: $l) { login } }",
+        variables: %{l: "acme"}
+      })
+
+    conn =
+      Plug.Test.conn(:post, "/graphql", body)
+      |> Plug.Conn.put_req_header("content-type", "application/json")
+      |> Nugitea.Router.call([])
+
+    assert conn.status == 200
+
+    assert Jason.decode!(conn.resp_body) == %{
+             "data" => %{"repositoryOwner" => %{"login" => "acme"}}
+           }
+  end
+
+  test "the default authorizer hides private and internal repos from anonymous callers" do
+    Application.delete_env(:nugitea, :authorizer)
+
+    v = run("{ repositories { nodes { nameWithOwner } } }")
+    assert v["repositories"]["nodes"] == [%{"nameWithOwner" => "acme/site"}]
+    assert run(~s|{ repository(owner: "alice", name: "dotfiles") { name } }|)["repository"] == nil
   end
 end

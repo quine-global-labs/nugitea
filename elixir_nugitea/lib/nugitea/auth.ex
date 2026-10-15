@@ -1,9 +1,9 @@
 defmodule Nugitea.Auth do
   @moduledoc """
-  The access-control seam. Nothing logs in yet, so the only implementation
-  is `AllowAll`, but the HTTP, SSH and GraphQL front ends ask this rather
-  than deciding themselves, so real auth can be added without touching them.
-  The implementation is the `:authorizer` app setting.
+  The access-control seam: the HTTP, SSH and GraphQL front ends ask this
+  rather than deciding themselves. The implementation is the `:authorizer`
+  app setting; the default, `Nugitea.Auth.Directory`, follows repo
+  visibility and grants in accounts.json. `AllowAll` permits everything.
   """
 
   @callback allow_pull?(user :: integer | nil, repo :: String.t()) :: boolean
@@ -13,11 +13,11 @@ defmodule Nugitea.Auth do
   def allow?("receive-pack", user, repo), do: impl().allow_push?(user, repo)
   def allow_pull?(repo), do: impl().allow_pull?(nil, repo)
 
-  defp impl, do: Application.get_env(:nugitea, :authorizer, Nugitea.Auth.AllowAll)
+  defp impl, do: Application.get_env(:nugitea, :authorizer, Nugitea.Auth.Directory)
 end
 
 defmodule Nugitea.Auth.AllowAll do
-  @moduledoc "Permits every pull and push. The default."
+  @moduledoc "Permits every pull and push."
   @behaviour Nugitea.Auth
 
   @impl true

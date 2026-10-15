@@ -55,14 +55,22 @@ defmodule Nugitea.RouterTest do
     assert result.resp_body == "not found"
   end
 
-  test "info/refs with known repo is 200" do
-    conn =
-      :get
-      |> Plug.Test.conn("/user/repo.git/info/refs?service=git-upload-pack")
+  test "info/refs for a private repo challenges anonymous callers and serves its owner",
+       %{tmp_dir: tmp} do
+    path = "/user/repo.git/info/refs?service=git-upload-pack"
+    anonymous = Nugitea.Router.call(Plug.Test.conn(:get, path), [])
+    assert anonymous.status == 401
+    assert Plug.Conn.get_resp_header(anonymous, "www-authenticate") == [~s(Basic realm="nugitea")]
 
-    result = Nugitea.Router.call(conn, [])
+    {:ok, dir} = Nugitea.Accounts.Store.load(tmp)
+    token = Nugitea.Accounts.Tokens.create_token(tmp, D.resolve(dir, "user"))
 
-    assert result.status == 200
+    owner =
+      Plug.Test.conn(:get, path)
+      |> Plug.Conn.put_req_header("authorization", "Basic " <> Base.encode64("user:" <> token))
+      |> Nugitea.Router.call([])
+
+    assert owner.status == 200
   end
 
   test "healthz endpoint returns 200 ok" do
@@ -589,6 +597,58 @@ defmodule Nugitea.RouterTest do
       refute Client.exists?("user/repo")
       {:ok, dir} = Nugitea.Accounts.Store.load(tmp)
       assert D.resolve_repo(dir, "user/repo") == nil
+    end
+  end
+
+  describe "raw and archive routes on a repo with content" do
+    setup %{tmp_dir: tmp} do
+      :ok =
+        Nugitea.Accounts.Store.update(tmp, fn d ->
+          {:ok, d, _} = D.add_repo_at(d, "alice/site", :public)
+          {:ok, d}
+        end)
+
+      :ok = Client.init_bare("alice/site")
+      work = Path.join(tmp, "work")
+      File.mkdir_p!(Path.join(work, "src"))
+      File.write!(Path.join(work, "src/main.txt"), "hello\n")
+      git = fn args -> {_, 0} = System.cmd("git", args, cd: work, stderr_to_stdout: true) end
+      git.(~w(init -q -b main .))
+      git.(~w(add .))
+      git.(~w(-c user.name=T -c user.email=t@example.com commit -q -m one))
+      git.(~w(tag v1.0))
+      git.(["push", "-q", Path.join(tmp, "alice/site.git"), "main", "v1.0"])
+      :ok
+    end
+
+    test "raw serves a nested file" do
+      conn =
+        Nugitea.Router.call(Plug.Test.conn(:get, "/api/v1/repos/alice/site/raw/src/main.txt"), [])
+
+      assert conn.status == 200
+      assert conn.resp_body == "hello\n"
+
+      assert conn =
+               Nugitea.Router.call(Plug.Test.conn(:get, "/api/v1/repos/alice/site/raw/nope"), [])
+
+      assert conn.status == 404
+    end
+
+    test "archive takes refs with dots, as zip or tar.gz" do
+      zip =
+        Nugitea.Router.call(Plug.Test.conn(:get, "/api/v1/repos/alice/site/archive/v1.0.zip"), [])
+
+      assert zip.status == 200
+      assert <<"PK", _::binary>> = zip.resp_body
+
+      tgz =
+        Nugitea.Router.call(
+          Plug.Test.conn(:get, "/api/v1/repos/alice/site/archive/main.tar.gz"),
+          []
+        )
+
+      assert tgz.status == 200
+      assert <<0x1F, 0x8B, _::binary>> = tgz.resp_body
     end
   end
 end

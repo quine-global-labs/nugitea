@@ -21,6 +21,8 @@ defmodule Nugitea.Router do
   alias Nugitea.Storage.Client
 
   plug :cors
+  plug :fetch_query_params
+  plug :parse_graphql_body
   plug :authenticate
   plug :match
   plug :dispatch
@@ -2909,13 +2911,22 @@ defmodule Nugitea.Router do
           send_resp(conn, 404, "not found")
 
         {_repo_id, repo_path} ->
-          # Extract ref and format from archive path (e.g. "main.zip" or "v1.0.tar.gz")
-          [ref, format] =
-            archive_path
-            |> String.split(".")
-            |> Enum.take(-2)
+          # `main.zip`, `v1.0.tar.gz`, `release/2.x.zip`: the ref is everything
+          # before the format suffix.
+          {ref, format} =
+            case Enum.join(archive_path, "/") do
+              name
+              when byte_size(name) > 7 and binary_part(name, byte_size(name), -7) == ".tar.gz" ->
+                {binary_part(name, 0, byte_size(name) - 7), "tar.gz"}
 
-          # Validate format
+              name
+              when byte_size(name) > 4 and binary_part(name, byte_size(name), -4) == ".zip" ->
+                {binary_part(name, 0, byte_size(name) - 4), "zip"}
+
+              _ ->
+                {nil, nil}
+            end
+
           case format do
             "zip" ->
               case Client.archive(repo_path, ref, "zip") do
@@ -2929,7 +2940,7 @@ defmodule Nugitea.Router do
               end
 
             "tar.gz" ->
-              case Client.archive(repo_path, ref, "tar") do
+              case Client.archive(repo_path, ref, "tar.gz") do
                 {:ok, archive_data} ->
                   conn
                   |> put_resp_content_type("application/gzip")
@@ -2951,7 +2962,7 @@ defmodule Nugitea.Router do
   get "/api/v1/repos/:owner/:repo/raw/*path" do
     owner = conn.params["owner"]
     repo = conn.params["repo"]
-    path = conn.params["path"]
+    path = Enum.join(conn.params["path"], "/")
     ref = conn.query_params["ref"]
 
     if owner != nil and repo != nil and path != nil do
@@ -3001,7 +3012,7 @@ defmodule Nugitea.Router do
           |> send_resp(200, body)
       end
     else
-      {:error, status, msg} -> send_resp(conn, status, msg)
+      {:error, status, msg} -> git_error(conn, status, msg)
     end
   end
 
@@ -3011,7 +3022,7 @@ defmodule Nugitea.Router do
          :ok <- allow(service, conn.assigns.user_id, repo) do
       rpc(conn, repo, service)
     else
-      {:error, status, msg} -> send_resp(conn, status, msg)
+      {:error, status, msg} -> git_error(conn, status, msg)
     end
   end
 
@@ -3081,8 +3092,23 @@ defmodule Nugitea.Router do
     end
   end
 
-  defp allow(service, user, repo),
-    do: if(Nugitea.Auth.allow?(service, user, repo), do: :ok, else: {:error, 403, "forbidden"})
+  # Denied and anonymous is 401, so git asks for credentials and retries;
+  # denied with credentials is 403.
+  defp allow(service, user, repo) do
+    cond do
+      Nugitea.Auth.allow?(service, user, repo) -> :ok
+      user == nil -> {:error, 401, "authentication required"}
+      true -> {:error, 403, "forbidden"}
+    end
+  end
+
+  defp git_error(conn, 401, msg) do
+    conn
+    |> put_resp_header("www-authenticate", ~s(Basic realm="nugitea"))
+    |> send_resp(401, msg)
+  end
+
+  defp git_error(conn, status, msg), do: send_resp(conn, status, msg)
 
   # The repo at `owner/name` (any case) as `{id, canonical path}`, or nil when
   # it doesn't exist or the caller can't see it, so a private repo 404s
@@ -3147,4 +3173,19 @@ defmodule Nugitea.Router do
   end
 
   defp cors(conn, _opts), do: conn
+
+  # Absinthe reads the query from parsed body params, and clients (the Nuxt
+  # frontend included) POST `{"query": ..., "variables": ...}` as JSON.
+  # Only for /graphql: the git routes stream their bodies, and the API
+  # routes read theirs themselves.
+  @graphql_parsers Plug.Parsers.init(
+                     parsers: [:json, Absinthe.Plug.Parser],
+                     pass: ["*/*"],
+                     json_decoder: Jason
+                   )
+
+  defp parse_graphql_body(%{request_path: "/graphql"} = conn, _opts),
+    do: Plug.Parsers.call(conn, @graphql_parsers)
+
+  defp parse_graphql_body(conn, _opts), do: conn
 end

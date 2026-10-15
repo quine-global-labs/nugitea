@@ -3,8 +3,8 @@ defmodule Nugitea.Accounts.Directory do
   Users, orgs, teams and enterprises: one model that can express how Gitea,
   GitHub and GitLab each arrange them (see rust_nugitea's accounts/mod.rs for
   the long comparison). Persisted as accounts.json by `Nugitea.Accounts.Store`.
-  Memberships, grants and `effective_access/3` aren't enforced yet: the
-  authorizer is still allow-all, since nothing logs in.
+  `effective_access/3` is what `Nugitea.Auth.Directory`, the default
+  authorizer, enforces.
 
   - One account namespace for users and orgs. An org may have a parent org;
     GitHub and Gitea are the depth-1 case of GitLab's tree. Slugs are unique,
