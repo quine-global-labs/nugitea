@@ -17,9 +17,11 @@ defmodule Nugitea.Router do
 
   alias Nugitea.Accounts
   alias Nugitea.Accounts.Directory, as: D
+  alias Nugitea.Accounts.Tokens
   alias Nugitea.Storage.Client
 
   plug :cors
+  plug :authenticate
   plug :match
   plug :dispatch
 
@@ -36,10 +38,7 @@ defmodule Nugitea.Router do
   end
 
   get "/api/v1/user" do
-    # For now, we'll use a basic implementation to return user information
-    # In a full implementation with proper auth, this would check authentication
-    # This would be set based on authentication
-    user = nil
+    user = conn.assigns.user_id
 
     {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
@@ -935,11 +934,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, _repo_path} ->
           # Get the current user (nil for anonymous)
           user = conn.assigns.user_id
 
@@ -977,11 +976,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, repo_path} ->
           # Check that user has write access to the repo
           user = conn.assigns.user_id
 
@@ -994,7 +993,7 @@ defmodule Nugitea.Router do
             mirrors = Nugitea.Mirror.Store.all()
 
             repo_mirror =
-              Enum.find(mirrors, &(&1.repo == "#{owner}/#{repo}" and &1.direction == :pull))
+              Enum.find(mirrors, &(&1.repo == repo_path and &1.direction == :pull))
 
             case repo_mirror do
               nil ->
@@ -1022,11 +1021,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, repo_path} ->
           # Get repository information from accounts directory
           repo_info = dir.repos[repo_id]
 
@@ -1043,9 +1042,6 @@ defmodule Nugitea.Router do
             if role == nil do
               send_resp(conn, 404, "not found")
             else
-              # Get repository path for storage access
-              repo_path = "#{owner}/#{repo}"
-
               # Get branch count using existing branches command
               branch_count =
                 case Client.branches(repo_path) do
@@ -1083,7 +1079,7 @@ defmodule Nugitea.Router do
               mirrors = Nugitea.Mirror.Store.all()
 
               repo_mirror =
-                Enum.find(mirrors, &(&1.repo == "#{owner}/#{repo}" and &1.direction == :pull))
+                Enum.find(mirrors, &(&1.repo == repo_path and &1.direction == :pull))
 
               # Set mirror properties  
               is_mirror = repo_mirror != nil
@@ -1092,8 +1088,8 @@ defmodule Nugitea.Router do
               response_data = %{
                 id: repo_id,
                 name: repo_info.slug,
-                full_name: "#{owner}/#{repo}",
-                description: repo_info.description || "",
+                full_name: repo_path,
+                description: Map.get(repo_info, :description) || "",
                 empty: empty,
                 private: repo_info.visibility == :private,
                 fork: false,
@@ -1179,11 +1175,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, repo_path} ->
           # Get repository information from accounts directory
           repo_info = dir.repos[repo_id]
 
@@ -1200,9 +1196,6 @@ defmodule Nugitea.Router do
             if role == nil do
               send_resp(conn, 404, "not found")
             else
-              # Get repository path for storage access
-              repo_path = "#{owner}/#{repo}"
-
               # Get branch count using existing branches command
               branch_count =
                 case Client.branches(repo_path) do
@@ -1240,7 +1233,7 @@ defmodule Nugitea.Router do
               mirrors = Nugitea.Mirror.Store.all()
 
               repo_mirror =
-                Enum.find(mirrors, &(&1.repo == "#{owner}/#{repo}" and &1.direction == :pull))
+                Enum.find(mirrors, &(&1.repo == repo_path and &1.direction == :pull))
 
               # Set mirror properties  
               is_mirror = repo_mirror != nil
@@ -1249,8 +1242,8 @@ defmodule Nugitea.Router do
               response_data = %{
                 id: repo_id,
                 name: repo_info.slug,
-                full_name: "#{owner}/#{repo}",
-                description: repo_info.description || "",
+                full_name: repo_path,
+                description: Map.get(repo_info, :description) || "",
                 empty: empty,
                 private: repo_info.visibility == :private,
                 fork: false,
@@ -1336,11 +1329,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, _repo_path} ->
           # Get repository information from accounts directory
           repo_info = dir.repos[repo_id]
 
@@ -1365,11 +1358,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, _repo_path} ->
           # Parse request body for topics array  
           case Plug.Conn.read_body(conn) do
             {:ok, body, _conn} ->
@@ -1441,11 +1434,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, _repo_path} ->
           # Clear all topics by setting to an empty array
           case Accounts.Store.update(
                  Accounts.state_dir(),
@@ -1474,11 +1467,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, _repo_path} ->
           # Get state filter parameter (open|closed|all)
           state = conn.params["state"] || "all"
 
@@ -1491,7 +1484,7 @@ defmodule Nugitea.Router do
               %{
                 number: pr.id |> String.split("-") |> List.last() |> String.to_integer(),
                 title: pr.title,
-                body: pr.description || "",
+                body: Map.get(pr, :description) || "",
                 state: Atom.to_string(pr.state),
                 user: %{login: "anonymous"},
                 head: %{
@@ -1524,11 +1517,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil and index != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, _repo_path} ->
           # Convert index to integer for lookup
           pr_id = "#{repo_id}-#{index}"
 
@@ -1542,7 +1535,7 @@ defmodule Nugitea.Router do
               formatted_pr = %{
                 number: index |> String.to_integer(),
                 title: pr.title,
-                body: pr.description || "",
+                body: Map.get(pr, :description) || "",
                 state: Atom.to_string(pr.state),
                 user: %{login: "anonymous"},
                 head: %{
@@ -1575,11 +1568,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil and index != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, _repo_path} ->
           # Parse request body for PR update data  
           case Plug.Conn.read_body(conn) do
             {:ok, body, _conn} ->
@@ -1625,7 +1618,7 @@ defmodule Nugitea.Router do
                             formatted_pr = %{
                               number: index |> String.to_integer(),
                               title: updated_pr.title,
-                              body: updated_pr.description || "",
+                              body: Map.get(updated_pr, :description) || "",
                               state: Atom.to_string(updated_pr.state),
                               user: %{login: "anonymous"},
                               head: %{
@@ -1681,11 +1674,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, _repo_path} ->
           # Parse request body for PR data
           case Plug.Conn.read_body(conn) do
             {:ok, body, _conn} ->
@@ -1772,11 +1765,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil and milestone_id != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, _repo_path} ->
           # Get the specific milestone  
           case D.get_milestone(dir, repo_id, milestone_id) do
             nil ->
@@ -1825,11 +1818,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        source_repo_id ->
+        {source_repo_id, repo_path} ->
           # Parse request body for optional organization and name parameters
           case Plug.Conn.read_body(conn) do
             {:ok, body, _conn} ->
@@ -1876,14 +1869,14 @@ defmodule Nugitea.Router do
                 if existing_repo_id != nil do
                   send_resp(conn, 409, "repository already exists")
                 else
-                  case Client.fork("#{owner}/#{repo}", fork_path) do
+                  case Client.fork(repo_path, fork_path) do
                     :ok ->
                       # Return 202 with the new repository JSON (with fork: true and parent)
                       response_data = %{
                         id: source_repo_id,
                         name: fork_name,
                         full_name: fork_path,
-                        description: source_repo.description || "",
+                        description: Map.get(source_repo, :description) || "",
                         empty: false,
                         private: source_repo.visibility == :private,
                         fork: true,
@@ -1891,7 +1884,7 @@ defmodule Nugitea.Router do
                         parent: %{
                           id: source_repo_id,
                           name: repo,
-                          full_name: "#{owner}/#{repo}"
+                          full_name: repo_path
                         },
                         mirror: false,
                         size: 0,
@@ -1988,11 +1981,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        source_repo_id ->
+        {source_repo_id, repo_path} ->
           # Get all repositories in the directory
           all_repos = D.repos(dir)
 
@@ -2015,7 +2008,7 @@ defmodule Nugitea.Router do
                 id: repo_info.id,
                 name: repo_info.slug,
                 full_name: "#{repo_info.owner}/#{repo_info.slug}",
-                description: repo_info.description || "",
+                description: Map.get(repo_info, :description) || "",
                 empty: false,
                 private: repo_info.visibility == :private,
                 fork: true,
@@ -2023,7 +2016,7 @@ defmodule Nugitea.Router do
                 parent: %{
                   id: source_repo_id,
                   name: repo,
-                  full_name: "#{owner}/#{repo}"
+                  full_name: repo_path
                 },
                 mirror: false,
                 size: 0,
@@ -2192,7 +2185,10 @@ defmodule Nugitea.Router do
 
             desc_match =
               if include_desc do
-                String.contains?(String.downcase(repo.description || ""), String.downcase(q))
+                String.contains?(
+                  String.downcase(Map.get(repo, :description) || ""),
+                  String.downcase(q)
+                )
               else
                 false
               end
@@ -2285,7 +2281,7 @@ defmodule Nugitea.Router do
           id: repo.id,
           name: repo.slug,
           full_name: "#{owner_slug}/#{repo.slug}",
-          description: repo.description || "",
+          description: Map.get(repo, :description) || "",
           empty: false,
           private: repo.visibility == :private,
           fork: false,
@@ -2362,11 +2358,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, repo_path} ->
           # Parse request body for update data
           case Plug.Conn.read_body(conn) do
             {:ok, body, _conn} ->
@@ -2398,8 +2394,8 @@ defmodule Nugitea.Router do
                       response_data = %{
                         id: repo_id,
                         name: repo_info.slug,
-                        full_name: "#{owner}/#{repo}",
-                        description: repo_info.description || "",
+                        full_name: repo_path,
+                        description: Map.get(repo_info, :description) || "",
                         empty: false,
                         private: repo_info.visibility == :private,
                         fork: false,
@@ -2414,7 +2410,7 @@ defmodule Nugitea.Router do
                         ssh_url: "",
                         clone_url: "",
                         original_url: "",
-                        website: repo_info.website || "",
+                        website: Map.get(repo_info, :website) || "",
                         stars_count: 0,
                         forks_count: 0,
                         watchers_count: 0,
@@ -2505,11 +2501,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil and index != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, _repo_path} ->
           # Parse request body for issue/pull request update data
           case Plug.Conn.read_body(conn) do
             {:ok, body, _conn} ->
@@ -2594,7 +2590,7 @@ defmodule Nugitea.Router do
                               response_data = %{
                                 number: index,
                                 title: updated_pr.title,
-                                body: updated_pr.description || "",
+                                body: Map.get(updated_pr, :description) || "",
                                 state: Atom.to_string(updated_pr.state),
                                 user: %{login: "anonymous"},
                                 head: %{
@@ -2658,11 +2654,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        repo_id ->
+        {repo_id, repo_path} ->
           # Check permissions - this is an admin operation only
           user = conn.assigns.user_id
 
@@ -2674,11 +2670,9 @@ defmodule Nugitea.Router do
                      Accounts.state_dir(),
                      &D.delete_repo(&1, repo_id)
                    ) do
-                {:ok, updated_dir} ->
+                :ok ->
                   # Now delete the actual git repository directory on disk
-                  canonical_path = D.repo_path(updated_dir, repo_id)
-
-                  case Client.delete(canonical_path) do
+                  case Client.delete(repo_path) do
                     :ok ->
                       conn
                       |> put_resp_content_type("application/json")
@@ -2722,14 +2716,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil and sha != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        _ ->
-          # Get repository path for storage access  
-          repo_path = "#{owner}/#{repo}"
-
+        {_repo_id, repo_path} ->
           case Client.commit_diff(repo_path, sha) do
             {:ok, diff} ->
               conn
@@ -2754,14 +2745,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil and sha != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        _ ->
-          # Get repository path for storage access  
-          repo_path = "#{owner}/#{repo}"
-
+        {_repo_id, repo_path} ->
           case Client.commit_patch(repo_path, sha) do
             {:ok, patch} ->
               conn
@@ -2786,14 +2774,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil and basehead != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        _repo_id ->
-          # Get repository path for storage access  
-          repo_path = "#{owner}/#{repo}"
-
+        {_repo_id, repo_path} ->
           # Parse basehead to separate base and head  
           [base, head] = String.split(basehead, "...", parts: 2)
 
@@ -2843,14 +2828,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        _repo_id ->
-          # Get repository path for storage access  
-          repo_path = "#{owner}/#{repo}"
-
+        {_repo_id, repo_path} ->
           case Client.branch_tips(repo_path) do
             {:ok, tips} ->
               branches =
@@ -2891,14 +2873,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil and branch_name != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        _repo_id ->
-          # Get repository path for storage access  
-          repo_path = "#{owner}/#{repo}"
-
+        {_repo_id, repo_path} ->
           case Client.branch(repo_path, branch_name) do
             {:ok, branch_data} ->
               conn
@@ -2925,11 +2904,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil and archive_path != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        _ ->
+        {_repo_id, repo_path} ->
           # Extract ref and format from archive path (e.g. "main.zip" or "v1.0.tar.gz")
           [ref, format] =
             archive_path
@@ -2939,9 +2918,6 @@ defmodule Nugitea.Router do
           # Validate format
           case format do
             "zip" ->
-              # Get repository path for storage access  
-              repo_path = "#{owner}/#{repo}"
-
               case Client.archive(repo_path, ref, "zip") do
                 {:ok, archive_data} ->
                   conn
@@ -2953,9 +2929,6 @@ defmodule Nugitea.Router do
               end
 
             "tar.gz" ->
-              # Get repository path for storage access  
-              repo_path = "#{owner}/#{repo}"
-
               case Client.archive(repo_path, ref, "tar") do
                 {:ok, archive_data} ->
                   conn
@@ -2984,14 +2957,11 @@ defmodule Nugitea.Router do
     if owner != nil and repo != nil and path != nil do
       {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
 
-      case Client.resolve(dir, "#{owner}/#{repo}") do
+      case find_repo(conn, dir, owner, repo) do
         nil ->
           send_resp(conn, 404, "not found")
 
-        _ ->
-          # Get repository path for storage access  
-          repo_path = "#{owner}/#{repo}"
-
+        {_repo_id, repo_path} ->
           # Determine reference - default to HEAD if not provided
           resolved_ref = if ref != nil and ref != "", do: ref, else: "HEAD"
 
@@ -3022,7 +2992,7 @@ defmodule Nugitea.Router do
     with {:ok, repo_git} <- strip_suffix(glob, "info/refs"),
          {:ok, service} <- service(conn.query_params["service"]),
          {:ok, repo} <- resolve(repo_git),
-         :ok <- allow(service, repo) do
+         :ok <- allow(service, conn.assigns.user_id, repo) do
       case Client.info_refs(repo, service, List.first(get_req_header(conn, "git-protocol"))) do
         {:ok, body} ->
           conn
@@ -3038,7 +3008,7 @@ defmodule Nugitea.Router do
   post "/*glob" do
     with {:ok, repo_git, service} <- rpc_path(glob),
          {:ok, repo} <- resolve(repo_git),
-         :ok <- allow(service, repo) do
+         :ok <- allow(service, conn.assigns.user_id, repo) do
       rpc(conn, repo, service)
     else
       {:error, status, msg} -> send_resp(conn, status, msg)
@@ -3111,8 +3081,56 @@ defmodule Nugitea.Router do
     end
   end
 
-  defp allow(service, repo),
-    do: if(Nugitea.Auth.allow?(service, nil, repo), do: :ok, else: {:error, 403, "forbidden"})
+  defp allow(service, user, repo),
+    do: if(Nugitea.Auth.allow?(service, user, repo), do: :ok, else: {:error, 403, "forbidden"})
+
+  # The repo at `owner/name` (any case) as `{id, canonical path}`, or nil when
+  # it doesn't exist or the caller can't see it, so a private repo 404s
+  # rather than revealing that it exists.
+  defp find_repo(conn, dir, owner, name) do
+    with id when id != nil <- D.resolve_repo(dir, "#{owner}/#{name}"),
+         path when path != nil <- D.repo_path(dir, id),
+         role when role != nil <- D.effective_role(dir, conn.assigns.user_id, id),
+         true <- Client.exists?(path) do
+      {id, path}
+    else
+      _ -> nil
+    end
+  end
+
+  # Who's calling, as Gitea accepts it: `Authorization: token T`, `Bearer T`,
+  # or basic auth with the token as the password. No header is anonymous
+  # (nil); a token we don't know is 401, with a challenge so git asks again.
+  defp authenticate(conn, _opts) do
+    with [header | _] <- get_req_header(conn, "authorization"),
+         token when token != nil <- bearer_token(header),
+         user when user != nil <- Tokens.lookup_token(Accounts.state_dir(), token) do
+      assign(conn, :user_id, user)
+    else
+      [] ->
+        assign(conn, :user_id, nil)
+
+      nil ->
+        conn
+        |> put_resp_header("www-authenticate", ~s(Basic realm="nugitea"))
+        |> send_resp(401, "unauthorized")
+        |> halt()
+    end
+  end
+
+  defp bearer_token("token " <> token), do: token
+  defp bearer_token("Bearer " <> token), do: token
+
+  defp bearer_token("Basic " <> encoded) do
+    with {:ok, credentials} <- Base.decode64(encoded),
+         [_user, token] <- String.split(credentials, ":", parts: 2) do
+      token
+    else
+      _ -> nil
+    end
+  end
+
+  defp bearer_token(_), do: nil
 
   defp not_found, do: {:error, 404, "not found"}
 

@@ -1,5 +1,5 @@
 defmodule Nugitea.RouterTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Nugitea.Accounts.Directory, as: D
   alias Nugitea.Storage.Client
@@ -527,5 +527,68 @@ defmodule Nugitea.RouterTest do
 
     # The route should be recognized (not 404) - either returns proper data or a 404 for non-existent repo
     assert result.status == 404 or result.status == 200
+  end
+
+  describe "repo routes resolve repos and respect visibility" do
+    # `user` owns the private user/repo (from setup); alice owns a public repo.
+    setup %{tmp_dir: tmp} do
+      :ok =
+        Nugitea.Accounts.Store.update(tmp, fn d ->
+          {:ok, d, _} = D.add_repo_at(d, "alice/demo", :public)
+          {:ok, d}
+        end)
+
+      :ok = Client.init_bare("alice/demo")
+      {:ok, dir} = Nugitea.Accounts.Store.load(tmp)
+      %{owner_token: Nugitea.Accounts.Tokens.create_token(tmp, D.resolve(dir, "user"))}
+    end
+
+    defp get(path, token \\ nil) do
+      conn = Plug.Test.conn(:get, path)
+      conn = if token, do: Plug.Conn.put_req_header(conn, "authorization", token), else: conn
+      Nugitea.Router.call(conn, [])
+    end
+
+    test "a public repo is found, case-insensitively, under its canonical name" do
+      conn = get("/repos/Alice/DEMO")
+      assert conn.status == 200
+      assert %{"name" => "demo", "full_name" => "alice/demo"} = Jason.decode!(conn.resp_body)
+    end
+
+    test "a private repo 404s anonymously and is visible to its owner", %{owner_token: t} do
+      assert get("/repos/user/repo").status == 404
+      assert get("/api/v1/repos/user/repo/branches").status == 404
+      assert get("/repos/user/repo", "token " <> t).status == 200
+      assert get("/api/v1/repos/user/repo/branches", "Bearer " <> t).status == 200
+    end
+
+    test "basic auth takes the token as the password", %{owner_token: t} do
+      basic = "Basic " <> Base.encode64("user:" <> t)
+      assert get("/repos/user/repo", basic).status == 200
+    end
+
+    test "GET /api/v1/user returns the token's user", %{owner_token: t} do
+      conn = get("/api/v1/user", "token " <> t)
+      assert conn.status == 200
+      assert %{"login" => "user"} = Jason.decode!(conn.resp_body)
+    end
+
+    test "an unknown token is 401 with a challenge" do
+      conn = get("/repos/alice/demo", "token nope")
+      assert conn.status == 401
+      assert Plug.Conn.get_resp_header(conn, "www-authenticate") == [~s(Basic realm="nugitea")]
+    end
+
+    test "the owner can delete a repo", %{owner_token: t, tmp_dir: tmp} do
+      conn =
+        Plug.Test.conn(:delete, "/api/v1/repos/user/repo")
+        |> Plug.Conn.put_req_header("authorization", "token " <> t)
+        |> Nugitea.Router.call([])
+
+      assert conn.status == 204
+      refute Client.exists?("user/repo")
+      {:ok, dir} = Nugitea.Accounts.Store.load(tmp)
+      assert D.resolve_repo(dir, "user/repo") == nil
+    end
   end
 end

@@ -1,5 +1,5 @@
 defmodule Nugitea.CLI.Test do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   @moduletag :tmp_dir
 
   alias Nugitea.CLI

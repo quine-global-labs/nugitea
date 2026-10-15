@@ -1,5 +1,5 @@
 defmodule Nugitea.WebhookTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
   @moduletag :tmp_dir
 
   alias Nugitea.Webhooks.Store

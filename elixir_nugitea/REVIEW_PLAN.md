@@ -27,7 +27,7 @@ storage node without any login (`git log --output=`, `git diff --output=`,
       longer runs `git` itself on the app tier with a relative path.
 - [x] Tests in `test/nugitea/storage_test.exs`.
 
-## 2. Repo path vs repo ID in the router
+## 2. Repo path vs repo ID in the router — done
 
 `Client.resolve/2` returns a canonical path (`"acme/api"`), but most routes
 use it as a repo ID (`dir.repos[repo_id]`, `effective_role(dir, user,
@@ -35,19 +35,24 @@ repo_id)`), so `GET /repos/:o/:r`, `/permissions`, pulls, forks and issues
 look up the wrong key. Routes also build `"#{owner}/#{repo}"` from the URL
 instead of the canonical path, so `ACME/api` fails on a case-sensitive disk.
 
-- [ ] Make `Client.resolve/2` return `{id, canonical_path}`, or add a
-      `resolve_repo/2` that does. Use the ID for the directory and the path
-      for storage everywhere.
+Worse than first thought: `Client.resolve/2` also requires a `.git`
+suffix, so every one of these routes returned 404 for every repo.
+
+- [x] New `find_repo/4` in the router returns `{id, canonical_path}`, or
+      nil when the repo is missing or the caller can't see it. All 24
+      routes use the ID for the directory and the path for storage. This
+      also adds the read check that branches, raw, archive, diff and
+      compare never had (they were only safe because they always 404'd).
+- [x] A repo that was never PATCHed no longer raises a KeyError on
+      `description` / `website`.
 
 ## 3. Authentication
 
-- [ ] Add a plug that sets `conn.assigns.user_id` from `Authorization:
-      token|Bearer` or basic auth (`Tokens.lookup_token/2`): nil when no
-      header is sent, 401 for a bad token. Several routes read
-      `conn.assigns.user_id` and raise a KeyError today.
-- [ ] `GET /api/v1/user` uses that user instead of hard-coded `nil`.
-- [ ] The git HTTP routes pass that user to `Nugitea.Auth.allow?/3`
-      (currently `nil`).
+- [x] `authenticate` plug: sets `conn.assigns.user_id` from
+      `Authorization: token|Bearer` or basic auth (`Tokens.lookup_token/2`);
+      nil when no header is sent, 401 with `WWW-Authenticate` for a bad token.
+- [x] `GET /api/v1/user` uses that user instead of hard-coded `nil`.
+- [x] The git HTTP routes pass that user to `Nugitea.Auth.allow?/3`.
 - [ ] Add access checks to routes that have none: `PATCH /repos/:o/:r`
       (anyone can change visibility), creating and editing PRs, forks.
       Issue PATCH should need write access, not read.
@@ -68,10 +73,11 @@ instead of the canonical path, so `ACME/api` fails on a case-sensitive disk.
 `update/2` returns `:ok` when the change gives back just `{:ok, dir}`;
 callers that match `{:ok, updated_dir}` crash with a CaseClauseError.
 
+- [x] Router `DELETE /api/v1/repos/...` (it also deleted `nil` from disk:
+      now it uses the canonical path it resolved).
 - [ ] CLI `repo set-topics` and `repo delete`; router `PATCH /repos/:o/:r`,
-      `PATCH .../pulls/:index`, `PATCH .../issues/:index`,
-      `DELETE /api/v1/repos/...`. Repo delete must also compute the
-      canonical path before removing the repo.
+      `PATCH .../pulls/:index`, `PATCH .../issues/:index`. These are now
+      reachable, so they crash instead of returning 404.
 - [ ] CLI `grant` and `user add-key` pass `fn _ -> new_dir end` (a bare
       struct, not `{:ok, dir}`), so nothing is saved, and they load outside
       the lock. Do the change inside the update function.
@@ -108,6 +114,13 @@ callers that match `{:ok, updated_dir}` crash with a CaseClauseError.
       the loop; probably remove them and add `data/` to `.gitignore`.
 
 ## 7. Tests that actually test
+
+- [x] The flaky `token create` CLI test: `router_test`, `cli_test` and
+      `webhook_test` ran `async: true` while changing the global
+      `:state_dir` / `:repo_root`, so they raced. They now run serially.
+- [x] Router tests for find-by-canonical-name, private repo 404 vs owner
+      200 (token, Bearer and basic auth), `GET /api/v1/user`, bad token
+      401, owner delete.
 
 - [ ] Rewrite the router tests that assert `status != 500` or
       `200 or 404` to set up a real repo and assert exact statuses and
