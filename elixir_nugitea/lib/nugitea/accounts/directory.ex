@@ -377,7 +377,9 @@ defmodule Nugitea.Accounts.Directory do
          slug: slug,
          visibility: visibility,
          topics: [],
-         fork_of: nil
+         fork_of: nil,
+         description: "",
+         website: ""
        }), id}
     end
   end
@@ -960,24 +962,16 @@ defmodule Nugitea.Accounts.Directory do
     }
   end
 
-  @doc "Updates repository properties like description and website"
+  @doc "Updates a repo's description, visibility and website; nil leaves one as it is."
   def update_repo(dir, repo_id, description, visibility, website) do
-    with {:ok, _} <- fetch(dir.repos, repo_id, "repo") do
-      updated_repo =
-        dir.repos[repo_id]
-        |> Map.put_new(:description, "")
-        |> Map.put_new(:website, "")
-        |> update_in([:description], fn _ ->
-          if description != nil, do: description, else: dir.repos[repo_id].description
-        end)
-        |> update_in([:visibility], fn _ ->
-          if visibility != nil, do: visibility, else: dir.repos[repo_id].visibility
-        end)
-        |> update_in([:website], fn _ ->
-          if website != nil, do: website, else: dir.repos[repo_id].website
-        end)
+    changes =
+      for {k, v} <- [description: description, visibility: visibility, website: website],
+          v != nil,
+          into: %{},
+          do: {k, v}
 
-      {:ok, put_in(dir.repos[repo_id], updated_repo)}
+    with {:ok, _} <- fetch(dir.repos, repo_id, "repo") do
+      {:ok, update_in(dir.repos[repo_id], &Map.merge(&1, changes))}
     end
   end
 
