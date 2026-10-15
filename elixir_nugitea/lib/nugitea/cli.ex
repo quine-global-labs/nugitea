@@ -15,6 +15,7 @@ defmodule Nugitea.CLI do
       team add-member ORG/SLUG USER           USER is a login
       grant USER|ORG/TEAM REPO_OR_ORG_PATH ROLE
       mirror add-pull|add-push [--interval 5m] REPO URL
+      mirror list
       webhook add REPO URL [--secret S]
       webhook list
       graphql-schema                          print the GraphQL schema (SDL)
@@ -152,6 +153,17 @@ defmodule Nugitea.CLI do
       end
 
     paths |> Enum.sort() |> Enum.each(&IO.puts/1)
+  end
+
+  defp run(["mirror", "list"], _opts) do
+    start()
+    mirrors = Nugitea.Mirror.Store.all()
+
+    mirrors
+    |> Enum.sort_by(& &1.repo)
+    |> Enum.each(fn mirror ->
+      IO.puts("#{mirror.direction} #{mirror.repo} #{mirror.remote_url}")
+    end)
   end
 
   defp run(["grant", principal, resource, role], _opts) do
