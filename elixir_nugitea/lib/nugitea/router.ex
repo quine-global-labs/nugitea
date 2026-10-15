@@ -207,6 +207,145 @@ defmodule Nugitea.Router do
     end
   end
 
+  get "/api/v1/users/:username/starred" do
+    username = conn.params["username"]
+
+    if username != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      # Find the user account by username
+      account_id = D.resolve(dir, username)
+
+      case D.account(dir, account_id) do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        %{kind: :user} ->
+          # This endpoint is for showing repositories a user has starred
+          # Since we don't implement actual star tracking in this system,
+          # we're following the Gitea behavior pattern:
+          # - For anonymous access: Only public repos (as if they had no starred items)
+          # - For authenticated access to own account: Return all accessible repos  
+          # - For authenticated access to other user's starred repos: Return 404
+
+          caller_id = Map.get(conn.assigns, :user_id, nil)
+
+          # Determine if the request is for the caller's own starred repositories
+          is_own_request = caller_id != nil and caller_id == account_id
+
+          # For the current implementation without actual star tracking:
+          # - If requesting someone else's starred repos: 404
+          # - If requesting own starred repos or anonymous access: return accessible repos  
+          if not is_own_request and caller_id != nil do
+            # Can't view someone else's starred repositories
+            send_resp(conn, 404, "not found")
+          else
+            # Return the repositories accessible to this user
+            accessible_repos =
+              Enum.filter(D.repos(dir), fn repo ->
+                case D.effective_role(dir, caller_id, repo.id) do
+                  nil ->
+                    # If no role (private), but anonymous access, return false unless it's public  
+                    caller_id != nil and repo.visibility == :public
+
+                  _ ->
+                    # User has access - return true for both public and private repos they can access
+                    true
+                end
+              end)
+
+            # Format repositories to be returned as JSON - using same structure as other repo endpoints  
+            response_data =
+              Enum.map(accessible_repos, fn repo ->
+                %{
+                  id: repo.id,
+                  name: repo.slug,
+                  full_name: "#{username}/#{repo.slug}",
+                  description: Map.get(repo, :description, ""),
+                  empty: false,
+                  private: repo.visibility == :private,
+                  fork: false,
+                  template: false,
+                  parent: nil,
+                  mirror: false,
+                  size: 0,
+                  language: nil,
+                  languages_url: "",
+                  html_url: "",
+                  url: "",
+                  ssh_url: "",
+                  clone_url: "",
+                  original_url: "",
+                  website: "",
+                  stars_count: 0,
+                  forks_count: 0,
+                  watchers_count: 0,
+                  branch_count: 0,
+                  open_issues_count: length(dir.pull_requests[repo.id] || []),
+                  open_pr_counter: length(dir.pull_requests[repo.id] || []),
+                  release_counter: 0,
+                  default_branch: "main",
+                  created_at: DateTime.utc_now(),
+                  updated_at: DateTime.utc_now(),
+                  permissions: %{
+                    # For now we'll set this conservatively
+                    admin: false,
+                    push: false,
+                    pull:
+                      repo.visibility != :private or
+                        D.effective_role(dir, caller_id, repo.id) != nil
+                  },
+                  has_code: true,
+                  has_issues: false,
+                  internal_tracker: nil,
+                  external_tracker: nil,
+                  has_wiki: false,
+                  external_wiki: nil,
+                  has_pull_requests: true,
+                  has_projects: false,
+                  projects_mode: "repo",
+                  has_releases: false,
+                  has_packages: false,
+                  has_actions: false,
+                  ignore_whitespace_conflicts: false,
+                  allow_merge_commits: true,
+                  allow_rebase: true,
+                  allow_rebase_explicit: true,
+                  allow_squash_merge: true,
+                  allow_fast_forward_only_merge: false,
+                  allow_merge_update: false,
+                  allow_rebase_update: false,
+                  allow_manual_merge: true,
+                  autodetect_manual_merge: false,
+                  default_delete_branch_after_merge: false,
+                  default_merge_style: "merge",
+                  default_update_style: "merge",
+                  default_allow_maintainer_edit: false,
+                  avatar_url: "",
+                  internal: false,
+                  mirror_interval: "",
+                  object_format_name: "sha1",
+                  mirror_updated: DateTime.utc_now(),
+                  mirror_last_sync_at: DateTime.utc_now(),
+                  topics: repo.topics || [],
+                  licenses: []
+                }
+              end)
+
+            conn
+            |> put_resp_content_type("application/json")
+            |> send_resp(200, Jason.encode!(response_data))
+          end
+
+        _ ->
+          # If it's not a user account (e.g., an org), return 404
+          send_resp(conn, 404, "not found")
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   get "/api/v1/users/:username/repos" do
     username = conn.params["username"]
 

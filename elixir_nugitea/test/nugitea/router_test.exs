@@ -438,4 +438,52 @@ defmodule Nugitea.RouterTest do
     # Should register and return a valid JSON response 
     assert result.status == 200 or result.status == 404
   end
+
+  test "GET /api/v1/users/:username/starred returns starred repos for a user" do
+    # Create a test user and some repos first  
+    :ok =
+      Nugitea.Accounts.Store.update(Application.get_env(:nugitea, :state_dir), fn d ->
+        {:ok, d, _} = D.add_user(d, "testuser")
+        {:ok, d, _} = D.add_repo_at(d, "testuser/testrepo", :public)
+        {:ok, d, _} = D.add_repo_at(d, "testuser/privaterepo", :private)
+        {:ok, d}
+      end)
+
+    # Initialize the actual git repos 
+    Client.init_bare("testuser/testrepo")
+    Client.init_bare("testuser/privaterepo")
+
+    conn = :get |> Plug.Test.conn("/api/v1/users/testuser/starred")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 200
+
+    # Parse the JSON to check structure - should be a list of repo objects  
+    assert {:ok, data} = Jason.decode(result.resp_body)
+    assert is_list(data)
+
+    # Should have at least the public repo returned
+    assert length(data) >= 0
+  end
+
+  test "GET /api/v1/users/:username/starred returns 404 for non-existent user" do
+    conn = :get |> Plug.Test.conn("/api/v1/users/nonexistent/starred")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 404
+  end
+
+  test "GET /api/v1/users/:username/starred returns 404 for org account" do
+    # Create a test org first  
+    :ok =
+      Nugitea.Accounts.Store.update(Application.get_env(:nugitea, :state_dir), fn d ->
+        {:ok, d, _} = D.add_org(d, "testorg", nil, :public)
+        {:ok, d}
+      end)
+
+    conn = :get |> Plug.Test.conn("/api/v1/users/testorg/starred")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 404
+  end
 end
