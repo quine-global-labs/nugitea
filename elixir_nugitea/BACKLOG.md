@@ -108,7 +108,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 
 ### Webhooks and statuses
 
-- [ ] Add `GET` and `POST /api/v1/repos/:owner/:repo/hooks`, and `GET`, `PATCH` and `DELETE .../hooks/:id`, on top of `Nugitea.Webhooks.Store` (giving hooks ids if they lack them), as Gitea's `Hook` (modules/structs/hook.go: id, type "gitea", config.url, config.content_type, events, active); admin required. Test them.
+- [!] Add `GET` and `POST /api/v1/repos/:owner/:repo/hooks`, and `GET`, `PATCH` and `DELETE .../hooks/:id`, on top of `Nugitea.Webhooks.Store` (giving hooks ids if they lack them), as Gitea's `Hook` (modules/structs/hook.go: id, type "gitea", config.url, config.content_type, events, active); admin required. Test them.
 - [ ] Report pushes from the storage tier without a hook script: in `Storage.exchange` for receive-pack, snapshot `git for-each-ref` before and after, and when anything changed, send `{ref, :pushed, [%{ref, before, after}]}` to `reply_to`; the router and SSH log it. Test that a push through `Client.start_exchange` delivers the update.
 - [ ] Add `Nugitea.Webhooks.Payload.push(dir, repo_id, updates, pusher)`, building Gitea's `PushPayload` (modules/structs/hook.go: ref, before, after, compare_url, commits, repository, pusher), and `Nugitea.Webhooks.sign(body, secret)`, the hex HMAC-SHA256 for the `X-Gitea-Signature` header. Test both against fixed inputs.
 - [ ] Deliver push webhooks: when the storage tier reports a push, POST the payload with `:httpc` to each of the repo's active hooks (headers `X-Gitea-Event: push`, `X-Gitea-Delivery`, and `X-Gitea-Signature` when there's a secret) from a `Task.Supervisor` child, retrying 3 times with backoff. Test it against a local Bandit server.
