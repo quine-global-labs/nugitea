@@ -952,16 +952,6 @@ defmodule Nugitea.Accounts.Directory do
     end
   end
 
-  @doc "Get branch tip information for a given branch"
-  def get_branch_tip(_dir, _repo_id, branch_name) do
-    # This would be implemented using Storage.branch_tips/1 or similar
-    # For now, we'll just return a fake structure compatible with the expected Gitea format
-    %{
-      ref: branch_name,
-      sha: "fake-sha-#{branch_name}"
-    }
-  end
-
   @doc "Updates a repo's description, visibility and website; nil leaves one as it is."
   def update_repo(dir, repo_id, description, visibility, website) do
     changes =
