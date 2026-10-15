@@ -3,7 +3,7 @@ defmodule Nugitea.CLI.Test do
   @moduletag :tmp_dir
 
   alias Nugitea.CLI
-  # Remove unused alias D
+  alias Nugitea.Accounts.Directory, as: D
 
   describe "parse_duration/1" do
     test "parses seconds correctly" do
@@ -64,6 +64,59 @@ defmodule Nugitea.CLI.Test do
 
       # Should return a valid token (not an error)  
       assert result == :ok
+    end
+  end
+
+  describe "seed command" do
+    setup %{tmp_dir: tmp} do
+      for {key, dir} <- [state_dir: "state", repo_root: "repos"] do
+        previous = Application.fetch_env!(:nugitea, key)
+        Application.put_env(:nugitea, key, Path.join(tmp, dir))
+        on_exit(fn -> Application.put_env(:nugitea, key, previous) end)
+      end
+
+      :ok
+    end
+
+    defp seed!(tmp, spec) do
+      file = Path.join(tmp, "seed.json")
+      File.write!(file, Jason.encode!(spec))
+      ExUnit.CaptureIO.capture_io(fn -> send(self(), {:result, CLI.main(["seed", file])}) end)
+    end
+
+    test "creates users, orgs, members, repos and tokens", %{tmp_dir: tmp} do
+      out =
+        seed!(tmp, %{
+          users: ["alice", "bob"],
+          orgs: [
+            %{path: "acme", members: %{alice: "owner", bob: "member"}},
+            %{path: "acme/platform", visibility: "internal"}
+          ],
+          repos: [%{path: "acme/platform/api", visibility: "private"}, %{path: "bob/notes"}],
+          tokens: ["alice"]
+        })
+
+      assert_received {:result, :ok}
+      {:ok, dir} = Nugitea.Accounts.Store.load(Nugitea.Accounts.state_dir())
+      [alice, bob, acme] = Enum.map(~w(alice bob acme), &D.resolve(dir, &1))
+      assert D.org_role(dir, acme, alice) == :owner
+      assert D.org_role(dir, acme, bob) == :member
+      api = D.resolve_repo(dir, "acme/platform/api")
+      assert D.repo(dir, api).visibility == :private
+      assert D.repo(dir, D.resolve_repo(dir, "bob/notes")).visibility == :public
+      assert Nugitea.Storage.Client.exists?("acme/platform/api")
+
+      %{"tokens" => %{"alice" => token}} = Jason.decode!(out)
+      assert Nugitea.Accounts.Tokens.lookup_token(Nugitea.Accounts.state_dir(), token) == alice
+    end
+
+    test "stops at the first error and saves nothing", %{tmp_dir: tmp} do
+      assert_raise Mix.Error, ~r/no user or org "nobody"/, fn ->
+        seed!(tmp, %{users: ["alice"], repos: [%{path: "nobody/repo"}]})
+      end
+
+      {:ok, dir} = Nugitea.Accounts.Store.load(Nugitea.Accounts.state_dir())
+      assert D.resolve(dir, "alice") == nil
     end
   end
 end

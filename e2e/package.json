@@ -1,0 +1,12 @@
+{
+  "name": "nugitea-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cy:run": "cypress run",
+    "cy:open": "cypress open"
+  },
+  "devDependencies": {
+    "cypress": "16.1.0"
+  }
+}

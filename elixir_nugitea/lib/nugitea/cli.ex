@@ -20,6 +20,7 @@ defmodule Nugitea.CLI do
       webhook list
       graphql-schema                          print the GraphQL schema (SDL)
       token create USER                       create a new access token for USER
+      seed FILE                               apply a JSON seed spec; prints its tokens as JSON
 
   Visibility is public (default), internal or private. `--state-dir` and
   `--storage-node` override NUGITEA_STATE_DIR and NUGITEA_STORAGE_NODE.
@@ -282,7 +283,80 @@ defmodule Nugitea.CLI do
     end
   end
 
+  # A declarative starting state, for demos and end-to-end tests:
+  #
+  #     {"users": ["alice"],
+  #      "orgs": [{"path": "acme", "visibility": "public", "members": {"alice": "owner"}}],
+  #      "repos": [{"path": "acme/api", "visibility": "private"}],
+  #      "tokens": ["alice"]}
+  #
+  # Every key is optional. Orgs are created in the order listed, so list a
+  # parent before its children. Prints `{"tokens": {"alice": "..."}}`.
+  defp run(["seed", file], _opts) do
+    start()
+    state = Accounts.state_dir()
+
+    with {:ok, spec} <- read_seed(file),
+         :ok <- Accounts.Store.update(state, &seed(&1, spec)),
+         {:ok, dir} <- Accounts.Store.load(state),
+         {:ok, _} <- each(dir, spec["repos"], &init_seeded_repo/2) do
+      tokens =
+        Map.new(spec["tokens"] || [], fn login ->
+          {login, Accounts.Tokens.create_token(state, D.resolve(dir, login))}
+        end)
+
+      IO.puts(Jason.encode!(%{tokens: tokens}))
+    end
+  end
+
   defp run(_args, _opts), do: {:error, "usage:\n" <> @moduledoc}
+
+  defp read_seed(file) do
+    with {:ok, json} <- File.read(file),
+         {:ok, spec} <- Jason.decode(json) do
+      {:ok, spec}
+    else
+      {:error, %Jason.DecodeError{} = e} -> {:error, "#{file}: #{Exception.message(e)}"}
+      {:error, reason} -> {:error, "#{file}: #{:file.format_error(reason)}"}
+    end
+  end
+
+  defp seed(dir, spec) do
+    with {:ok, dir} <- each(dir, spec["users"], &D.add_user/2),
+         {:ok, dir} <- each(dir, spec["orgs"], &seed_org/2) do
+      each(dir, spec["repos"], fn dir, r ->
+        with {:ok, vis} <- visibility(%{visibility: r["visibility"]}),
+             do: D.add_repo_at(dir, r["path"], vis)
+      end)
+    end
+  end
+
+  defp seed_org(dir, org) do
+    with {:ok, vis} <- visibility(%{visibility: org["visibility"]}),
+         {:ok, dir, id} <- D.add_org_at(dir, org["path"], vis) do
+      each(dir, org["members"], fn dir, {login, role} ->
+        with {:ok, role} <- role(%{role: role}),
+             user when is_integer(user) <- D.resolve(dir, login) || {:error, "no user #{login}"},
+             do: D.set_org_member(dir, id, user, role)
+      end)
+    end
+  end
+
+  defp init_seeded_repo(dir, r) do
+    with :ok <- Client.init_bare(D.repo_path(dir, D.resolve_repo(dir, r["path"]))), do: {:ok, dir}
+  end
+
+  # Applies `fun` to each item in turn, threading the directory through and
+  # stopping at the first error.
+  defp each(dir, items, fun) do
+    Enum.reduce_while(items || [], {:ok, dir}, fn item, {:ok, dir} ->
+      case fun.(dir, item) do
+        {:ok, dir} -> {:cont, {:ok, dir}}
+        {:ok, dir, _id} -> {:cont, {:ok, dir}}
+        error -> {:halt, error}
+      end
+    end)
+  end
 
   # Starts the app (servers only for `serve`). Reaching a storage node on
   # another host needs distribution, so a CLI run joins as a throwaway node.

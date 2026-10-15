@@ -58,6 +58,30 @@ suffix, so every one of these routes returned 404 for every repo.
       Issue PATCH should need write access, not read.
 - [ ] `/permissions`: handle `:triage` and `:maintain` (CaseClauseError).
 
+## 3b. Found by the e2e suite — done
+
+`e2e/` (see its README) walks the real server and web UI, and found these
+on its first runs:
+
+- [x] `/graphql` had no body parser, so the JSON POSTs the Nuxt frontend
+      sends were parsed as GraphQL text: the web UI showed nothing at all.
+      Parse JSON for `/graphql` only.
+- [x] The default authorizer was `AllowAll`: anyone could push to any repo
+      over HTTP, and the web UI listed private repos to anonymous visitors.
+      `Nugitea.Auth.Directory` is now the default; a denied anonymous git
+      request gets 401 with `WWW-Authenticate`, so git retries with
+      credentials (and a bad token then fails). The GraphQL schema tests
+      opt back into `AllowAll`.
+- [x] Query params were never fetched: `raw?ref=` crashed, and `?state=`
+      (pulls) and `?q=` (search) were silently ignored. Fetched for every
+      route now.
+- [x] Raw and archive treated their glob params (lists) as strings. Archive
+      also split `v1.0.zip` into ref `0`, and served uncompressed tar as
+      gzip.
+- [x] `Auth.Directory`: one `role/2` shared by pull and push.
+- [x] `mix nugitea seed FILE`: declarative starting state, used by the
+      e2e suite.
+
 ## 4. SSH
 
 - [ ] `Channel.init/1` doesn't put `user_id` in its state, so
@@ -93,9 +117,7 @@ callers that match `{:ok, updated_dir}` crash with a CaseClauseError.
       the relative repo path; compare to the `{:ok, refs}` tuple; check
       only on `:DOWN`; report deleted refs; hook it to webhooks.
       `Webhooks.Payload.push/4` crashes on `[]` and hard-codes the owner.
-- [ ] Archive route: `*archive` is a list; split the ref from a
-      `.zip`/`.tar.gz` suffix (refs may contain dots) and pass `tar.gz`.
-      Raw route: `*path` is a list; join it with `/`.
+- [x] Archive and raw glob params (see 3b).
 - [ ] Compare route: JSON-encode commits as maps (keyword lists crash
       Jason); return 400 when there's no `...` (MatchError today).
 - [ ] `Storage.branch/2`: `for-each-ref` matches by prefix (`feat` returns
@@ -136,7 +158,7 @@ callers that match `{:ok, updated_dir}` crash with a CaseClauseError.
       (as the git routes do), to flatten the nested `case`s. Move the API
       into `Nugitea.API` under `/api/v1`, so `/repos/...` and
       `/api/v1/repos/...` are no longer mixed.
-- [ ] `Auth.Directory`: one `role_for/2`, shared by pull and push.
+- [x] `Auth.Directory`: one `role/2`, shared by pull and push.
 - [ ] Storage: one push-detection function; parse `size/1` in one pass;
       `commits/3` returns maps, as its doc says; `archive/3` uses
       `capture/2`.
