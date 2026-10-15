@@ -104,7 +104,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 ### Releases
 
 - [!] Add releases: `Nugitea.Releases` (releases.json: per repo `%{id, tag_name, target_commitish, name, body, draft, prerelease, author, created_at, published_at}`), `GET` and `POST /api/v1/repos/:owner/:repo/releases`, and `GET`, `PATCH` and `DELETE .../releases/:id`, as Gitea's `Release` (modules/structs/release.go), creating the tag with `Storage.create_tag/4` when it doesn't exist. Test them.
-- [ ] Add `GET /api/v1/repos/:owner/:repo/releases/latest` (the newest that's neither a draft nor a prerelease) and `GET .../releases/tags/:tag`, and hide drafts from users without write access. Test them.
+- [!] Add `GET /api/v1/repos/:owner/:repo/releases/latest` (the newest that's neither a draft nor a prerelease) and `GET .../releases/tags/:tag`, and hide drafts from users without write access. Test them.
 
 ### Webhooks and statuses
 
