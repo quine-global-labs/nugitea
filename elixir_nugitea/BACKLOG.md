@@ -123,7 +123,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 - [x] Add `mix nugitea mirror list`, printing `direction repo url interval` per mirror from `Nugitea.Mirror.all/0`, sorted by repo. Test it with `ExUnit.CaptureIO` and a tmp state dir.
 - [x] Add `POST /api/v1/repos/:owner/:repo/mirror-sync` (write access required), running `Nugitea.Mirror.sync/1` for the repo's pull mirror (404 when it has none), and show `mirror: true` and `original_url` in the repo JSON for pull mirrors. Test it with a file:// source repo.
 - [!] Add `POST /api/v1/repos/migrate` (`{"clone_addr", "repo_name", "repo_owner", "mirror", "private"}`): creates the repo, fetches everything from clone_addr on the storage tier (`Storage.fetch_all(path, url)`: `git fetch --prune URL +refs/*:refs/*`), and with `mirror: true` also adds a pull mirror. Test it with a file:// source repo.
-- [ ] Support `auto_init` when creating repos through the API: with `{"auto_init": true, "default_branch": "main"}`, commit a README.md holding `# NAME` and the description with `Storage.commit_file/6`, and point HEAD at that branch. Test that the branch and file exist.
+- [!] Support `auto_init` when creating repos through the API: with `{"auto_init": true, "default_branch": "main"}`, commit a README.md holding `# NAME` and the description with `Storage.commit_file/6`, and point HEAD at that branch. Test that the branch and file exist.
 
 ## Test what exists
 
