@@ -1348,6 +1348,60 @@ defmodule Nugitea.Router do
     end
   end
 
+  get "/api/v1/repos/:owner/:repo/milestones/:id" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+    milestone_id = conn.params["id"]
+
+    if owner != nil and repo != nil and milestone_id != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        repo_id ->
+          # Get the specific milestone  
+          case D.get_milestone(dir, repo_id, milestone_id) do
+            nil ->
+              send_resp(conn, 404, "milestone not found")
+
+            milestone ->
+              # Format milestone according to Gitea's API specification
+              # The API response requires an exact structure for the Milestone
+              formatted_milestone = %{
+                id: milestone.id,
+                title: milestone.title,
+                description: milestone.description,
+                state: Atom.to_string(milestone.state),
+                # Placeholder - in real impl this should count issues
+                open_issues: 0,
+                # Placeholder - in real impl this should count issues  
+                closed_issues: 0,
+                created_at: DateTime.to_iso8601(milestone.created_at),
+                updated_at: DateTime.to_iso8601(milestone.updated_at),
+                closed_at:
+                  case milestone.state do
+                    :closed -> DateTime.to_iso8601(milestone.updated_at)
+                    _ -> nil
+                  end,
+                due_on:
+                  case milestone.due_date do
+                    nil -> nil
+                    date -> DateTime.to_iso8601(date)
+                  end
+              }
+
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(200, Jason.encode!(formatted_milestone))
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   post "/api/v1/repos/:owner/:repo/forks" do
     owner = conn.params["owner"]
     repo = conn.params["repo"]

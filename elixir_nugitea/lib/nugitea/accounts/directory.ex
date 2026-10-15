@@ -54,7 +54,9 @@ defmodule Nugitea.Accounts.Directory do
             # pull_requests: repo_id -> [pull_request]
             pull_requests: %{},
             # issues: repo_id -> [issue]  
-            issues: %{}
+            issues: %{},
+            # milestones: repo_id -> [milestone]
+            milestones: %{}
 
   def roles, do: @roles
   def visibilities, do: @visibilities
@@ -877,6 +879,74 @@ defmodule Nugitea.Accounts.Directory do
         end)
 
       {:ok, put_in(dir.pull_requests[repo_id], updated_prs)}
+    end
+  end
+
+  @doc "Lists milestones for a repository"
+  def list_milestones(dir, repo_id) do
+    Map.get(dir.milestones, repo_id, [])
+  end
+
+  @doc "Creates a milestone"
+  def create_milestone(dir, repo_id, title, description, due_date, state) do
+    with {:ok, _} <- fetch(dir.repos, repo_id, "repo") do
+      # Create the milestone structure with the required fields
+      now = DateTime.utc_now()
+
+      milestone = %{
+        id: "#{repo_id}-#{DateTime.to_unix(now)}",
+        title: title,
+        description: description || "",
+        due_date: due_date,
+        state: state || :open,
+        created_at: now,
+        updated_at: now
+      }
+
+      # Add milestone to the repo's milestone list
+      milestones = Map.get(dir.milestones, repo_id, [])
+      updated_milestones = [milestone | milestones]
+
+      {:ok, put_in(dir.milestones[repo_id], updated_milestones), milestone.id}
+    end
+  end
+
+  @doc "Gets a specific milestone by ID"
+  def get_milestone(dir, repo_id, milestone_id) do
+    milestones = Map.get(dir.milestones, repo_id, [])
+    Enum.find(milestones, &(&1.id == milestone_id))
+  end
+
+  @doc "Updates a milestone"
+  def update_milestone(dir, repo_id, milestone_id, params) do
+    with {:ok, _} <- fetch(dir.repos, repo_id, "repo") do
+      milestones = Map.get(dir.milestones, repo_id, [])
+
+      # Find the milestone to update
+      updated_milestones =
+        Enum.map(milestones, fn milestone ->
+          if milestone.id == milestone_id do
+            updated_milestone = %{
+              milestone
+              | title: Map.get(params, "title", milestone.title),
+                description: Map.get(params, "description", milestone.description),
+                due_date: Map.get(params, "due_on", milestone.due_date),
+                state:
+                  case Map.get(params, "state") do
+                    "open" -> :open
+                    "closed" -> :closed
+                    _ -> milestone.state
+                  end,
+                updated_at: DateTime.utc_now()
+            }
+
+            updated_milestone
+          else
+            milestone
+          end
+        end)
+
+      {:ok, put_in(dir.milestones[repo_id], updated_milestones)}
     end
   end
 
