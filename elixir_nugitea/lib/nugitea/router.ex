@@ -558,6 +558,232 @@ defmodule Nugitea.Router do
     end
   end
 
+  get "/api/v1/teams/:id" do
+    # Get team by ID
+    team_id = conn.params["id"]
+
+    if team_id != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      # Ensure team exists 
+      case D.team(dir, team_id) do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        team ->
+          # Get the team's organization to determine if user has access
+          org_id = team.org
+          caller_id = Map.get(conn.assigns, :user_id, nil)
+
+          # Check if the user is a member of the team's organization (required for access)  
+          org_member = D.org_member?(dir, org_id, caller_id)
+
+          if not org_member do
+            send_resp(conn, 404, "not found")
+          else
+            # Return team information 
+            # Extract organization name using D.account and org ID from the team
+            org_account = D.account(dir, org_id)
+            org_name = if org_account, do: org_account.slug, else: ""
+
+            response_data = %{
+              id: team.id,
+              name: team.slug,
+              description: "",
+              organization: %{
+                id: org_id,
+                name: org_name
+              },
+              includes_all_repositories: false,
+              permission: "read",
+              units: [],
+              units_map: %{},
+              can_create_org_repo: false,
+              visibility: "private"
+            }
+
+            conn
+            |> put_resp_content_type("application/json")
+            |> send_resp(200, Jason.encode!(response_data))
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
+  get "/api/v1/teams/:id/members" do
+    # Get team members by team ID
+    team_id = conn.params["id"]
+
+    if team_id != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      # Ensure team exists
+      case D.team(dir, team_id) do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        team ->
+          # Get the team's organization to determine if user has access
+          org_id = team.org
+          caller_id = Map.get(conn.assigns, :user_id, nil)
+
+          # Check if the user is a member of the team's organization (required for access)  
+          org_member = D.org_member?(dir, org_id, caller_id)
+
+          if not org_member do
+            send_resp(conn, 404, "not found")
+          else
+            # Get all members of this team
+            # Team members are stored as user ID -> role in the team.members map (which is a map in D.team structure) 
+            members_map = team.members
+
+            # Create response with id and login for each member  
+            response_data =
+              Enum.map(members_map, fn {user_id, _role} ->
+                case D.account(dir, user_id) do
+                  %{kind: :user, slug: user_slug} ->
+                    %{id: user_id, login: user_slug}
+
+                  _ ->
+                    # Skip non-user accounts (shouldn't happen in valid data)
+                    nil
+                end
+              end)
+              |> Enum.reject(&is_nil/1)
+
+            conn
+            |> put_resp_content_type("application/json")
+            |> send_resp(200, Jason.encode!(response_data))
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
+  put "/api/v1/teams/:id/members/:username" do
+    # Add a member to a team (org owners only)
+    team_id = conn.params["id"]
+    username = conn.params["username"]
+
+    if team_id != nil and username != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      # Ensure the team exists
+      case D.team(dir, team_id) do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        team ->
+          # Get the organization of this team 
+          org_id = team.org
+          caller_id = Map.get(conn.assigns, :user_id, nil)
+
+          # Check if the user is an owner of the team's organization (required for adding members)  
+          # We need the role of caller in the organization and it should be owner
+          org_owner = D.org_role(dir, org_id, caller_id) == :owner
+
+          if not org_owner do
+            send_resp(conn, 403, "forbidden")
+          else
+            # Find the user to add by username 
+            user_id = D.resolve(dir, username)
+
+            case D.account(dir, user_id) do
+              nil ->
+                send_resp(conn, 404, "not found")
+
+              %{kind: :user} = _user ->
+                # Add the user to the team (default role is member)
+                case Accounts.Store.update(
+                       Accounts.state_dir(),
+                       &D.set_team_member(&1, team_id, user_id, :member)
+                     ) do
+                  {:ok, _} ->
+                    conn
+                    |> put_resp_content_type("application/json")
+                    |> send_resp(204, "")
+
+                  {:error, reason} ->
+                    conn
+                    |> put_resp_content_type("application/json")
+                    |> send_resp(
+                      500,
+                      Jason.encode!(%{
+                        error: "Failed to add team member: #{reason}"
+                      })
+                    )
+                end
+            end
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
+  delete "/api/v1/teams/:id/members/:username" do
+    # Remove a member from a team (org owners only)
+    team_id = conn.params["id"]
+    username = conn.params["username"]
+
+    if team_id != nil and username != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      # Ensure the team exists
+      case D.team(dir, team_id) do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        team ->
+          # Get the organization of this team 
+          org_id = team.org
+          caller_id = Map.get(conn.assigns, :user_id, nil)
+
+          # Check if the user is an owner of the team's organization (required for removing members)  
+          org_owner = D.org_role(dir, org_id, caller_id) == :owner
+
+          if not org_owner do
+            send_resp(conn, 403, "forbidden")
+          else
+            # Find the user to remove by username 
+            user_id = D.resolve(dir, username)
+
+            case D.account(dir, user_id) do
+              nil ->
+                send_resp(conn, 404, "not found")
+
+              %{kind: :user} = _user ->
+                # Remove the user from the team (passing nil as role to remove)
+                case Accounts.Store.update(
+                       Accounts.state_dir(),
+                       &D.set_team_member(&1, team_id, user_id, nil)
+                     ) do
+                  {:ok, _} ->
+                    conn
+                    |> put_resp_content_type("application/json")
+                    |> send_resp(204, "")
+
+                  {:error, reason} ->
+                    conn
+                    |> put_resp_content_type("application/json")
+                    |> send_resp(
+                      500,
+                      Jason.encode!(%{
+                        error: "Failed to remove team member: #{reason}"
+                      })
+                    )
+                end
+            end
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   forward "/graphql",
     to: Absinthe.Plug.GraphiQL,
     init_opts: [schema: Nugitea.GraphQL.Schema, interface: :simple, json_codec: Jason]
