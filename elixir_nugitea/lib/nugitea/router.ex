@@ -927,7 +927,7 @@ defmodule Nugitea.Router do
     to: Absinthe.Plug.GraphiQL,
     init_opts: [schema: Nugitea.GraphQL.Schema, interface: :simple, json_codec: Jason]
 
-  get "/repos/:owner/:repo/permissions" do
+  get "/api/v1/repos/:owner/:repo/permissions" do
     # Build repo path from params like the existing routes do
     owner = conn.params["owner"]
     repo = conn.params["repo"]
@@ -946,7 +946,7 @@ defmodule Nugitea.Router do
           # Determine effective role using Directory.effective_role/3
           role = Nugitea.Accounts.Directory.effective_role(dir, user, repo_id)
 
-          # If role is nil (private repo the caller can't see), return 404
+          # If role is nil (private repo the caller can't see), return 404 
           case role do
             nil ->
               send_resp(conn, 404, "not found")
