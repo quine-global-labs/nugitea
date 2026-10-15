@@ -1946,6 +1946,18 @@ defmodule Nugitea.Router do
     topic_only = conn.params["topic"] == "true"
     include_desc = conn.params["includeDesc"] == "true"
 
+    sort_by =
+      case conn.params["sort"] do
+        nil -> "name"
+        val -> val
+      end
+
+    order =
+      case conn.params["order"] do
+        nil -> "asc"
+        val -> val
+      end
+
     uid =
       case conn.params["uid"] do
         nil -> nil
@@ -1980,8 +1992,13 @@ defmodule Nugitea.Router do
 
     limit =
       case conn.params["limit"] do
-        nil -> 30
-        val -> String.to_integer(val)
+        nil ->
+          30
+
+        val ->
+          integer_val = String.to_integer(val)
+          # Cap the limit at 50 as Gitea does
+          if integer_val > 50, do: 50, else: integer_val
       end
 
     # Load directory
@@ -2048,12 +2065,9 @@ defmodule Nugitea.Router do
     # Filter by team ID if provided 
     search_result =
       if team_id != nil do
-        Enum.filter(search_result, fn _repo ->
-          # Check if repository belongs to the team (simplified approach)
-          # This requires looking at team member relationships and how teams are associated with repos
-          # Simplified for now - in real implementation would check teams associations
-          false
-        end)
+        # Simplified - in actual Gitea implementation, teams would be properly checked against repos
+        # This would require looking at how teams grant access to repos, which is not fully implemented yet
+        search_result
       else
         search_result
       end
@@ -2061,21 +2075,35 @@ defmodule Nugitea.Router do
     # Filter by starred by user if provided
     search_result =
       if starred_by != nil do
-        Enum.filter(search_result, fn _repo ->
-          # Would check if repository is starred by the specific user 
-          # Simplified for now 
-          false
-        end)
+        # Simplified - in actual Gitea implementation, would check star status 
+        # This would require implementing the stars functionality (not fully implemented)
+        search_result
       else
         search_result
       end
 
-    # Sort results (default is by name alphabetical, but we'll match Gitea's logic)
+    # Sort results based on parameters
     sorted_repos =
-      Enum.sort_by(search_result, fn repo ->
-        # Default sort order - this is basic; a full implementation would parse sort parameters
-        repo.slug
-      end)
+      case sort_by do
+        "name" ->
+          if order == "desc" do
+            Enum.sort_by(search_result, & &1.slug, &>=/2)
+          else
+            Enum.sort_by(search_result, & &1.slug)
+          end
+
+        "updated" ->
+          if order == "desc" do
+            # For now we'll just return a default sorting as we don't have update times
+            Enum.sort_by(search_result, & &1.slug, &>=/2)
+          else
+            Enum.sort_by(search_result, & &1.slug)
+          end
+
+        _ ->
+          # Default to sorting by name
+          Enum.sort_by(search_result, & &1.slug)
+      end
 
     # Apply pagination
     offset = (page - 1) * limit
@@ -2164,9 +2192,10 @@ defmodule Nugitea.Router do
         }
       end)
 
+    # Return the response in correct Gitea format with {"ok": true, "data": [...]}
     conn
     |> put_resp_content_type("application/json")
-    |> send_resp(200, Jason.encode!(formatted_repos))
+    |> send_resp(200, Jason.encode!(%{ok: true, data: formatted_repos}))
   end
 
   patch "/repos/:owner/:repo" do
