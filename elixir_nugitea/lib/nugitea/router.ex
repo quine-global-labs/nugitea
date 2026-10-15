@@ -1062,6 +1062,115 @@ defmodule Nugitea.Router do
     end
   end
 
+  put "/repos/:owner/:repo/topics" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+
+    if owner != nil and repo != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        repo_id ->
+          # Parse request body for topics array  
+          case Plug.Conn.read_body(conn) do
+            {:ok, body, _conn} ->
+              case Jason.decode(body) do
+                {:ok, %{"topics" => topics}} when is_list(topics) ->
+                  # Validate that all topics are strings
+                  if Enum.all?(topics, &is_binary(&1)) do
+                    case Accounts.Store.update(
+                           Accounts.state_dir(),
+                           &D.set_repo_topics(&1, repo_id, topics)
+                         ) do
+                      {:ok, _} ->
+                        conn
+                        |> put_resp_content_type("application/json")
+                        |> send_resp(200, Jason.encode!(%{topics: topics}))
+
+                      {:error, reason} ->
+                        conn
+                        |> put_resp_content_type("application/json")
+                        |> send_resp(400, Jason.encode!(%{error: reason}))
+                    end
+                  else
+                    send_resp(conn, 400, "all topics must be strings")
+                  end
+
+                {:ok, topics} when is_list(topics) ->
+                  # If it's just an array of strings (old API style)
+                  if Enum.all?(topics, &is_binary(&1)) do
+                    case Accounts.Store.update(
+                           Accounts.state_dir(),
+                           &D.set_repo_topics(&1, repo_id, topics)
+                         ) do
+                      {:ok, _} ->
+                        conn
+                        |> put_resp_content_type("application/json")
+                        |> send_resp(200, Jason.encode!(%{topics: topics}))
+
+                      {:error, reason} ->
+                        conn
+                        |> put_resp_content_type("application/json")
+                        |> send_resp(400, Jason.encode!(%{error: reason}))
+                    end
+                  else
+                    send_resp(conn, 400, "all topics must be strings")
+                  end
+
+                {:ok, _} ->
+                  send_resp(conn, 400, "topics must be in array format")
+
+                {:error, _reason} ->
+                  send_resp(conn, 400, "invalid JSON in request body")
+              end
+
+            {:error, reason} ->
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(500, Jason.encode!(%{error: "Failed to read request body: #{reason}"}))
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
+  delete "/repos/:owner/:repo/topics" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+
+    if owner != nil and repo != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        repo_id ->
+          # Clear all topics by setting to an empty array
+          case Accounts.Store.update(
+                 Accounts.state_dir(),
+                 &D.set_repo_topics(&1, repo_id, [])
+               ) do
+            {:ok, _} ->
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(204, "")
+
+            {:error, reason} ->
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(400, Jason.encode!(%{error: reason}))
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   get "/api/v1/repos/:owner/:repo/pulls" do
     owner = conn.params["owner"]
     repo = conn.params["repo"]
