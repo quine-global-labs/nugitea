@@ -584,4 +584,48 @@ defmodule Nugitea.StorageTest do
     # no breaking changes were introduced to basic exchange function
     assert :ok == :ok
   end
+
+  # A bare alice/demo whose main has two commits: file1.txt ("one"), then
+  # file2.txt ("two").
+  defp seed_demo(root) do
+    :ok = Storage.init_bare("alice/demo")
+    work = Path.join(root, "work")
+    File.mkdir_p!(work)
+    git = fn args -> {_, 0} = System.cmd("git", args, cd: work, stderr_to_stdout: true) end
+    git.(["init", "--quiet", "-b", "main", "."])
+
+    for {file, msg} <- [{"file1.txt", "one"}, {"file2.txt", "two"}] do
+      File.write!(Path.join(work, file), msg)
+      git.(["add", file])
+      git.(~w(-c user.name=T -c user.email=t@example.com commit --quiet -m) ++ [msg])
+    end
+
+    git.(["push", "--quiet", Path.join(root, "alice/demo.git"), "main"])
+  end
+
+  test "refs that look like options never reach git as options", %{tmp_dir: root} do
+    seed_demo(root)
+    evil = "--output=" <> Path.join(root, "pwned")
+
+    assert {:error, _} = Storage.commits("alice/demo", evil <> "..main", %{})
+    assert {:error, _} = Storage.archive("alice/demo", evil, "zip")
+    assert {:error, _} = Storage.changed_files("alice/demo", evil, "main")
+    assert {:error, _} = Storage.create_branch("alice/demo", "x", evil)
+    assert Path.wildcard(Path.join(root, "pwned*")) == []
+
+    # Only formats git archive is meant to produce.
+    assert {:error, _} = Storage.archive("alice/demo", "main", "exe")
+  end
+
+  test "commits/3 with a path filter still follows the ref", %{tmp_dir: root} do
+    seed_demo(root)
+    assert {:ok, [commit]} = Storage.commits("alice/demo", "main", %{path: "file1.txt"})
+    assert commit[:message] == "one"
+  end
+
+  test "changed_files/3 lists the files between two refs", %{tmp_dir: root} do
+    seed_demo(root)
+    assert Storage.changed_files("alice/demo", "main~1", "main") == {:ok, ["file2.txt"]}
+    assert {:error, _} = Storage.changed_files("alice/demo", "nope", "main")
+  end
 end

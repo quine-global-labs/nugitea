@@ -2807,41 +2807,20 @@ defmodule Nugitea.Router do
                 # Calculate total commit count
                 total_commits = length(commits)
 
-                # Get changed files from git diff --name-only 
-                case Client.run_git(repo_path, ["diff", "--name-only", "#{base}...#{head}"]) do
-                  :ok ->
-                    # Since run_git returns command result in a different format than expected,
-                    # let's use our own approach to get changed files
-                    case System.cmd(
-                           "git",
-                           ["-C", repo_path, "diff", "--name-only", "#{base}...#{head}"],
-                           stderr_to_stdout: false
-                         ) do
-                      {files, 0} ->
-                        # Parse the file names into a proper response structure 
-                        changed_files =
-                          String.split(files, "\n", trim: true)
-                          |> Enum.filter(fn f -> f != "" end)
-                          |> Enum.map(&%{filename: &1, status: "modified"})
+                case Client.changed_files(repo_path, base, head) do
+                  {:ok, files} ->
+                    response_data = %{
+                      commits: commits,
+                      total_commits: total_commits,
+                      files: Enum.map(files, &%{filename: &1, status: "modified"})
+                    }
 
-                        # Construct the response with commits, total count and files 
-                        response_data = %{
-                          commits: commits,
-                          total_commits: total_commits,
-                          files: changed_files
-                        }
+                    conn
+                    |> put_resp_content_type("application/json")
+                    |> send_resp(200, Jason.encode!(response_data))
 
-                        conn
-                        |> put_resp_content_type("application/json")
-                        |> send_resp(200, Jason.encode!(response_data))
-
-                      _ ->
-                        # If we failed to get file names 
-                        send_resp(conn, 500, "Failed to retrieve changed files")
-                    end
-
-                  _ ->
-                    # If git command for diff fails (e.g., invalid base/commit), return 404
+                  {:error, _} ->
+                    # e.g. an unknown base or head
                     send_resp(conn, 404, "not found")
                 end
 

@@ -16,6 +16,7 @@ defmodule Nugitea.Storage do
 
   @services %{"upload-pack" => "upload-pack", "receive-pack" => "receive-pack"}
   @hooks ~w(pre-receive update post-receive)
+  @archive_formats ~w(zip tar tar.gz tgz)
 
   # ---- repos --------------------------------------------------------------
 
@@ -485,21 +486,21 @@ defmodule Nugitea.Storage do
     committer_email, committer_date, message}
   """
   def commits(path, ref, opts) do
-    with {:ok, dir} <- existing(path) do
+    with {:ok, dir} <- existing(path),
+         :ok <- no_leading_dash([ref]) do
       base_args = [
         "log",
         "--format=%H%x00%P%x00%an%x00%ae%x00%ad%x00%cn%x00%ce%x00%cd%x00%s",
         "--date=iso"
       ]
 
-      # Build arguments with options
-      processed_args =
+      # The ref goes before the path filter's `--`, or git reads it as a path.
+      full_args =
         base_args
         |> add_option(opts, :limit, "-n")
         |> add_option(opts, :skip, "--skip")
+        |> Kernel.++([ref])
         |> add_path_filter(opts)
-
-      full_args = processed_args ++ [ref]
 
       case capture(dir, full_args) do
         {:ok, out} ->
@@ -554,6 +555,15 @@ defmodule Nugitea.Storage do
     end
   end
 
+  @doc "The files that differ between `base` and `head` (`git diff --name-only BASE...HEAD`)."
+  def changed_files(path, base, head) do
+    with {:ok, dir} <- existing(path),
+         :ok <- no_leading_dash([base, head]),
+         {:ok, out} <- capture(dir, ["diff", "--name-only", "#{base}...#{head}"]) do
+      {:ok, String.split(out, "\n", trim: true)}
+    end
+  end
+
   @doc "Get the patch for a commit as text/plain"
   def commit_patch(path, sha) do
     with {:ok, dir} <- existing(path),
@@ -572,6 +582,8 @@ defmodule Nugitea.Storage do
   """
   def archive(path, ref, format) do
     with {:ok, dir} <- existing(path),
+         :ok <- no_leading_dash([ref]),
+         :ok <- if(format in @archive_formats, do: :ok, else: {:error, "bad archive format"}),
          name <- path |> String.split("/") |> List.last(),
          prefix = "#{name}/",
          command = ["archive", "--format=#{format}", "--prefix=#{prefix}", ref] do
@@ -629,6 +641,7 @@ defmodule Nugitea.Storage do
   def create_branch(path, name, from_ref) do
     with {:ok, dir} <- existing(path),
          :ok <- check_ref_format(name),
+         :ok <- no_leading_dash([from_ref]),
          {:ok, _out} <- capture(dir, ["update-ref", "refs/heads/#{name}", from_ref]) do
       :ok
     end
