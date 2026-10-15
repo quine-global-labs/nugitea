@@ -634,6 +634,24 @@ defmodule Nugitea.Storage do
     end
   end
 
+  @doc """
+  Returns the number of commits in a repository.
+
+  Uses `git rev-list --count HEAD` to count the commits in the repository.
+  """
+  def commit_count(path) do
+    with {:ok, dir} <- existing(path) do
+      case capture(dir, ["rev-list", "--count", "HEAD"]) do
+        {:ok, output} ->
+          # Parse the output as an integer (trim whitespace and parse)
+          {:ok, String.trim(output) |> String.to_integer()}
+
+        {:error, _} = err ->
+          err
+      end
+    end
+  end
+
   defp check_ref_format(name) do
     case System.cmd("git", ["check-ref-format", "--branch", name]) do
       {_, 0} -> :ok

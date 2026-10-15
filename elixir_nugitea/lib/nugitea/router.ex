@@ -930,6 +930,16 @@ defmodule Nugitea.Router do
                     0
                 end
 
+              # Get commit count
+              commit_count =
+                case Client.commit_count(repo_path) do
+                  {:ok, count} ->
+                    count
+
+                  {:error, _} ->
+                    0
+                end
+
               # Check if repo has a pull mirror 
               mirrors = Nugitea.Mirror.Store.all()
 
@@ -964,6 +974,7 @@ defmodule Nugitea.Router do
                 forks_count: 0,
                 watchers_count: 0,
                 branch_count: branch_count,
+                commit_count: commit_count,
                 open_issues_count: length(dir.pull_requests[repo_id] || []),
                 open_pr_counter: length(dir.pull_requests[repo_id] || []),
                 release_counter: 0,
