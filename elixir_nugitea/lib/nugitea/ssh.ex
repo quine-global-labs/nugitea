@@ -48,62 +48,40 @@ defmodule Nugitea.SSH do
     @impl true
     def host_key(algorithm, opts), do: :ssh_file.host_key(algorithm, opts)
 
-    # Accept only stored keys.
     @impl true
     def is_auth_key(key, user, _opts) do
       case Nugitea.Accounts.Store.load(Nugitea.Accounts.state_dir()) do
-        {:ok, dir} ->
-          case Nugitea.Accounts.Directory.resolve(dir, user) do
-            nil ->
-              false
-
-            user_id ->
-              # First try to find a regular user key
-              case get_user_key(dir, user_id, key) do
-                {:ok, _key_info} ->
-                  true
-
-                :error ->
-                  # If not found, check if it's a deploy key for this user as a repo owner
-                  check_deploy_key_authentication(dir, user_id, key)
-              end
-          end
-
-        {:error, _reason} ->
-          false
+        {:ok, dir} -> authorized?(dir, user, key)
+        {:error, _} -> false
       end
     end
 
-    defp get_user_key(dir, user_id, key) do
-      case Nugitea.Accounts.Directory.get_user_keys(dir, user_id) do
+    @doc """
+    Whether `key` (a decoded public key, as OTP passes it) is one of the SSH
+    keys stored for the login `user` (a charlist from OTP, or a string).
+
+    Deploy keys don't log in: one would act as its repo's owner, with access
+    to all their repos, so they need checking per repo at exec time instead.
+    """
+    def authorized?(dir, user, key) do
+      case Nugitea.Accounts.Directory.resolve(dir, to_string(user)) do
         nil ->
-          :error
+          false
 
-        keys ->
-          if Enum.any?(keys, &(&1.key == key)) do
-            {:ok, List.first(Enum.filter(keys, &(&1.key == key)))}
-          else
-            :error
-          end
+        user_id ->
+          keys = Nugitea.Accounts.Directory.get_user_keys(dir, user_id) || []
+          Enum.any?(keys, &(decode(&1.key) == key))
       end
     end
 
-    defp check_deploy_key_authentication(dir, user_id, _key) do
-      # In a real implementation, we would need to parse the SSH request or 
-      # find the repo from other sources. This placeholder just provides an 
-      # authentication mechanism for deploy keys.
-      # It would normally check if there are any deploy keys for repositories 
-      # owned by this user that match the provided key.
-
-      # In our simplified approach: we'll return true whenever a repository belongs
-      # to this user and has deploy keys. The main goal is to ensure the infrastructure supports deploy key authentication.
-      repos = for(r <- Nugitea.Accounts.Directory.repos(dir), r.owner == user_id, do: r.id)
-
-      Enum.any?(repos, fn repo_id ->
-        deploy_keys = Nugitea.Accounts.Directory.get_deploy_keys(dir, repo_id)
-        # We check if any keys exist (not the key matching for simplicity in this demo)  
-        length(deploy_keys) > 0
-      end)
+    # Stored keys are `authorized_keys` lines: "ssh-ed25519 AAAA... comment".
+    defp decode(line) do
+      case :ssh_file.decode(line, :auth_keys) do
+        [{key, _attrs} | _] -> key
+        _ -> nil
+      end
+    rescue
+      _ -> nil
     end
   end
 

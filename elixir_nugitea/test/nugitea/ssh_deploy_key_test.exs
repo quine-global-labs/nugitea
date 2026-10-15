@@ -29,4 +29,36 @@ defmodule Nugitea.SSHDeployKeyTest do
     assert deploy_keys |> hd() |> Map.get(:key) == key
     assert deploy_keys |> hd() |> Map.get(:read_only) == true
   end
+
+  describe "Keys.authorized?/3" do
+    @describetag :tmp_dir
+
+    # A fresh key pair: the stored authorized_keys line, and the decoded key
+    # OTP hands to is_auth_key.
+    defp keypair(tmp, name) do
+      path = Path.join(tmp, name)
+      {_, 0} = System.cmd("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", path])
+      line = path |> Kernel.<>(".pub") |> File.read!() |> String.trim()
+      [{decoded, _}] = :ssh_file.decode(line, :auth_keys)
+      {line, decoded}
+    end
+
+    test "accepts only the user's own keys", %{tmp_dir: tmp} do
+      {alice_line, alice_key} = keypair(tmp, "alice")
+      {deploy_line, deploy_key} = keypair(tmp, "deploy")
+      {_, stranger_key} = keypair(tmp, "stranger")
+
+      {:ok, dir, alice} = Directory.add_user(%Directory{}, "alice")
+      {:ok, dir, repo} = Directory.add_repo(dir, alice, "site", :public)
+      {:ok, dir} = Directory.add_user_key(dir, alice, alice_line)
+      {:ok, dir} = Directory.add_deploy_key(dir, repo, deploy_line, true)
+
+      assert Keys.authorized?(dir, ~c"alice", alice_key)
+      assert Keys.authorized?(dir, "ALICE", alice_key)
+      refute Keys.authorized?(dir, ~c"alice", stranger_key)
+      # A deploy key on alice's repo doesn't log in as alice.
+      refute Keys.authorized?(dir, ~c"alice", deploy_key)
+      refute Keys.authorized?(dir, ~c"nobody", alice_key)
+    end
+  end
 end
