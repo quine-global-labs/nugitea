@@ -121,21 +121,21 @@ defmodule Nugitea.RouterTest do
   end
 
   test "repos/:owner/:repo/permissions with unknown repo returns 404" do
-    conn = :get |> Plug.Test.conn("/repos/unknown/repo/permissions")
+    conn = :get |> Plug.Test.conn("/api/v1/repos/unknown/repo/permissions")
     result = Nugitea.Router.call(conn, [])
 
     assert result.status == 404
   end
 
   test "repos/:owner/:repo with unknown repo returns 404" do
-    conn = :get |> Plug.Test.conn("/repos/unknown/repo")
+    conn = :get |> Plug.Test.conn("/api/v1/repos/unknown/repo")
     result = Nugitea.Router.call(conn, [])
 
     assert result.status == 404
   end
 
   test "repos/:owner/:repo/topics with unknown repo returns 404" do
-    conn = :get |> Plug.Test.conn("/repos/unknown/repo/topics")
+    conn = :get |> Plug.Test.conn("/api/v1/repos/unknown/repo/topics")
     result = Nugitea.Router.call(conn, [])
 
     assert result.status == 404
@@ -144,7 +144,7 @@ defmodule Nugitea.RouterTest do
   # This test just verifies that the route handles calls to existing repos properly.
   # The actual detailed functionality is demonstrated in other integration tests.
   test "repos/:owner/:repo endpoint registered and handles basic calls (doesn't crash)" do
-    conn = :get |> Plug.Test.conn("/repos/user/repo")
+    conn = :get |> Plug.Test.conn("/api/v1/repos/user/repo")
     result = Nugitea.Router.call(conn, [])
 
     # This endpoint should register, at least returning valid status for existing repo
@@ -158,7 +158,7 @@ defmodule Nugitea.RouterTest do
 
     conn =
       :patch
-      |> Plug.Test.conn("/repos/user/repo", %{
+      |> Plug.Test.conn("/api/v1/repos/user/repo", %{
         description: "Updated description",
         website: "https://example.com",
         private: false
@@ -176,7 +176,7 @@ defmodule Nugitea.RouterTest do
     result = Nugitea.Router.call(conn, [])
 
     assert result.status == 401
-    assert result.resp_body == "unauthorized"
+    assert Jason.decode!(result.resp_body) == %{"message" => "unauthorized"}
   end
 
   test "GET /api/v1/user with a user would return user info (stub)" do
@@ -201,7 +201,7 @@ defmodule Nugitea.RouterTest do
     # Initialize the actual git repo 
     Client.init_bare("private_owner/private_repo")
 
-    conn = :get |> Plug.Test.conn("/repos/private_owner/private_repo")
+    conn = :get |> Plug.Test.conn("/api/v1/repos/private_owner/private_repo")
     result = Nugitea.Router.call(conn, [])
 
     assert result.status == 404
@@ -219,7 +219,7 @@ defmodule Nugitea.RouterTest do
     # Initialize the actual git repo 
     Client.init_bare("private_owner/private_repo")
 
-    conn = :get |> Plug.Test.conn("/repos/private_owner/private_repo/permissions")
+    conn = :get |> Plug.Test.conn("/api/v1/repos/private_owner/private_repo/permissions")
     result = Nugitea.Router.call(conn, [])
 
     assert result.status == 404
@@ -393,7 +393,7 @@ defmodule Nugitea.RouterTest do
   end
 
   test "GET /api/v1/repos/:owner/:repo/git/commits/:sha.diff route registered and functional" do
-    conn = :get |> Plug.Test.conn("/repos/user/repo/git/commits/HEAD.diff")
+    conn = :get |> Plug.Test.conn("/api/v1/repos/user/repo/git/commits/HEAD.diff")
     result = Nugitea.Router.call(conn, [])
 
     # Route should register without error (status 404 is expected as repo doesn't have content)
@@ -401,7 +401,7 @@ defmodule Nugitea.RouterTest do
   end
 
   test "GET /api/v1/repos/:owner/:repo/git/commits/:sha.patch route registered and functional" do
-    conn = :get |> Plug.Test.conn("/repos/user/repo/git/commits/HEAD.patch")
+    conn = :get |> Plug.Test.conn("/api/v1/repos/user/repo/git/commits/HEAD.patch")
     result = Nugitea.Router.call(conn, [])
 
     # Route should register without error (status 404 is expected as repo doesn't have content)
@@ -558,21 +558,21 @@ defmodule Nugitea.RouterTest do
     end
 
     test "a public repo is found, case-insensitively, under its canonical name" do
-      conn = get("/repos/Alice/DEMO")
+      conn = get("/api/v1/repos/Alice/DEMO")
       assert conn.status == 200
       assert %{"name" => "demo", "full_name" => "alice/demo"} = Jason.decode!(conn.resp_body)
     end
 
     test "a private repo 404s anonymously and is visible to its owner", %{owner_token: t} do
-      assert get("/repos/user/repo").status == 404
+      assert get("/api/v1/repos/user/repo").status == 404
       assert get("/api/v1/repos/user/repo/branches").status == 404
-      assert get("/repos/user/repo", "token " <> t).status == 200
+      assert get("/api/v1/repos/user/repo", "token " <> t).status == 200
       assert get("/api/v1/repos/user/repo/branches", "Bearer " <> t).status == 200
     end
 
     test "basic auth takes the token as the password", %{owner_token: t} do
       basic = "Basic " <> Base.encode64("user:" <> t)
-      assert get("/repos/user/repo", basic).status == 200
+      assert get("/api/v1/repos/user/repo", basic).status == 200
     end
 
     test "GET /api/v1/user returns the token's user", %{owner_token: t} do
@@ -582,7 +582,7 @@ defmodule Nugitea.RouterTest do
     end
 
     test "an unknown token is 401 with a challenge" do
-      conn = get("/repos/alice/demo", "token nope")
+      conn = get("/api/v1/repos/alice/demo", "token nope")
       assert conn.status == 401
       assert Plug.Conn.get_resp_header(conn, "www-authenticate") == [~s(Basic realm="nugitea")]
     end

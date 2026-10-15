@@ -53,10 +53,11 @@ suffix, so every one of these routes returned 404 for every repo.
       nil when no header is sent, 401 with `WWW-Authenticate` for a bad token.
 - [x] `GET /api/v1/user` uses that user instead of hard-coded `nil`.
 - [x] The git HTTP routes pass that user to `Nugitea.Auth.allow?/3`.
-- [ ] Add access checks to routes that have none: `PATCH /repos/:o/:r`
-      (anyone can change visibility), creating and editing PRs, forks.
-      Issue PATCH should need write access, not read.
-- [ ] `/permissions`: handle `:triage` and `:maintain` (CaseClauseError).
+- [x] Access checks on routes that had none (in the `Nugitea.API`
+      rewrite): PATCH repo and topics need admin; editing PRs and issues,
+      and mirror-sync, need write; opening a PR or forking needs a login;
+      forking into an org needs org ownership.
+- [x] `/permissions` handles `:triage` and `:maintain`.
 
 ## 3b. Found by the e2e suite — done
 
@@ -87,10 +88,15 @@ on its first runs:
 - [ ] `Channel.init/1` doesn't put `user_id` in its state, so
       `state.user_id` crashes on every exec. Carry the authenticated user
       over from `is_auth_key/3`.
-- [ ] `is_auth_key/3` gets the username as a charlist; convert it before
-      calling `Directory.resolve/2`.
-- [ ] Save `user_keys` in `Accounts.Store` (with `pull_requests`, `issues`,
-      repo `description`/`website`), or keys are lost on the next save.
+- [x] `is_auth_key/3`: a deploy key check accepted *any* key for a user
+      owning a repo with a deploy key, and user keys could never match
+      (OTP passes a decoded key; stored keys are strings). Now
+      `Keys.authorized?/3` decodes and compares, and handles the charlist
+      login.
+- [ ] Deploy keys: they no longer log in (one would act as the repo owner
+      on all their repos). Support them with a per-repo check at exec time.
+- [x] `Accounts.Store` saves `user_keys`, `pull_requests`, `issues`,
+      `milestones` and repo `description`/`website`.
 
 ## 5. How callers use `Store.update/2`
 
@@ -99,9 +105,8 @@ callers that match `{:ok, updated_dir}` crash with a CaseClauseError.
 
 - [x] Router `DELETE /api/v1/repos/...` (it also deleted `nil` from disk:
       now it uses the canonical path it resolved).
-- [ ] CLI `repo set-topics` and `repo delete`; router `PATCH /repos/:o/:r`,
-      `PATCH .../pulls/:index`, `PATCH .../issues/:index`. These are now
-      reachable, so they crash instead of returning 404.
+- [x] The API routes (all rewritten around one `change/1` helper).
+- [ ] CLI `repo set-topics` and `repo delete`.
 - [ ] CLI `grant` and `user add-key` pass `fn _ -> new_dir end` (a bare
       struct, not `{:ok, dir}`), so nothing is saved, and they load outside
       the lock. Do the change inside the update function.
@@ -118,22 +123,22 @@ callers that match `{:ok, updated_dir}` crash with a CaseClauseError.
       only on `:DOWN`; report deleted refs; hook it to webhooks.
       `Webhooks.Payload.push/4` crashes on `[]` and hard-codes the owner.
 - [x] Archive and raw glob params (see 3b).
-- [ ] Compare route: JSON-encode commits as maps (keyword lists crash
-      Jason); return 400 when there's no `...` (MatchError today).
+- [x] Compare route: commits as maps; 400 without `...`.
 - [ ] `Storage.branch/2`: `for-each-ref` matches by prefix (`feat` returns
       `feat/x`); use an exact ref. `create_branch/3` overwrites an
       existing branch; pass the zero OID as the old value.
 - [ ] `commit_diff/2` on a root commit (diff against the empty tree).
       `info_refs/3` crashes on any git failure.
-- [ ] Forks: record the fork in the directory (`fork_of`); `GET .../forks`
-      should read `fork_of`, not `:parent`.
+- [x] Forks are recorded in the directory (`fork_of`) and listed from it.
 - [ ] Issue and PR IDs collide within a second; use per-repo numbers.
-      `update_issue/4` compares the state against atoms but receives
-      strings.
+      (The API now converts an issue's `state` to the atom
+      `update_issue/4` expects.)
+- [ ] There's no route to create an issue or a milestone.
 - [ ] `Tokens`: lock and write atomically like the other stores; fix the
       `||` / `|>` precedence in `list_user_tokens/2`; use URL-safe Base64.
-- [ ] `data/tokens.json` and `test_team_endpoints.exs` were committed by
-      the loop; probably remove them and add `data/` to `.gitignore`.
+- [x] `elixir_nugitea/data/` (accounts.json, tokens.json and the SSH host
+      *private key*) is untracked and ignored. The key is still in git
+      history: rotate it anywhere it was deployed.
 
 ## 7. Tests that actually test
 
@@ -144,24 +149,28 @@ callers that match `{:ok, updated_dir}` crash with a CaseClauseError.
       200 (token, Bearer and basic auth), `GET /api/v1/user`, bad token
       401, owner delete.
 
-- [ ] Rewrite the router tests that assert `status != 500` or
-      `200 or 404` to set up a real repo and assert exact statuses and
-      bodies.
+- [x] `test/nugitea/api_test.exs`: every REST route against a real
+      fixture, with exact statuses and bodies (14 of its 24 tests failed
+      against the old router).
+- [ ] Delete the remaining `status != 500` / `200 or 404` tests in
+      `router_test.exs`, which `api_test.exs` now covers properly.
 - [ ] `Auth.Directory` tests: public, private, owner, stranger (as the
       backlog asked), not just a repo that doesn't exist.
 
 ## 8. Simplifying refactors
 
-- [ ] One `repo_json(dir, id, role)`, used by every route that returns a
-      repo (about 70 lines are currently copied 6+ times).
-- [ ] A `json/3` helper, plus `with` chains over `{:error, status, msg}`
-      (as the git routes do), to flatten the nested `case`s. Move the API
-      into `Nugitea.API` under `/api/v1`, so `/repos/...` and
-      `/api/v1/repos/...` are no longer mixed.
+- [x] The REST API moved to `Nugitea.API` under `/api/v1` (the old
+      unprefixed `/repos/...` routes are gone): one `repo_json/3`, `with`
+      chains over `{:error, status, message}`, Gitea-style JSON errors.
+      Router plus API went from 3,191 lines to about 1,000.
 - [x] `Auth.Directory`: one `role/2`, shared by pull and push.
 - [ ] Storage: one push-detection function; parse `size/1` in one pass;
       `commits/3` returns maps, as its doc says; `archive/3` uses
       `capture/2`.
-- [ ] `SSH.Keys.get_user_key` → `Enum.find`; one token-hash helper;
-      remove the no-op mappers in `Accounts.Store.encode/1`; update the
-      out-of-date moduledocs; use or delete the `Modules.Structs.*` structs.
+- [x] Deleted dead code: `Modules.Structs.*`, `Directory.get_branch_tip`
+      (fake SHAs), `router.ex.backup`, `test_team_endpoints.exs`,
+      `AGENTS_SUMMARY.md`; `SSH.Keys.get_user_key` is gone with the rewrite.
+- [ ] One token-hash helper; remove the remaining no-op mappers in
+      `Accounts.Store.encode/1`.
+- [ ] One helper for the four JSON stores (accounts, webhooks, mirrors,
+      tokens), with the lock and atomic write `Tokens` lacks.
