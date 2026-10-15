@@ -117,7 +117,7 @@ state dir and repo root, as test/nugitea/router_test.exs does.
 ### Users, teams, keys, mirrors
 
 - [x] Add `GET /api/v1/teams/:id`, `GET /api/v1/teams/:id/members`, and `PUT` and `DELETE /api/v1/teams/:id/members/:username` (org owners only), using `Directory.set_team_member/4`, as Gitea's `Team` (modules/structs/org_team.go). Test them.
-- [ ] Add `GET` and `POST /api/v1/user/keys`, `DELETE /api/v1/user/keys/:id` and `GET /api/v1/users/:username/keys` on top of `Directory.add_user_key/3`, giving keys ids and SHA256 fingerprints (as `ssh-keygen -l` prints them); 422 for a malformed key. Test them.
+- [!] Add `GET` and `POST /api/v1/user/keys`, `DELETE /api/v1/user/keys/:id` and `GET /api/v1/users/:username/keys` on top of `Directory.add_user_key/3`, giving keys ids and SHA256 fingerprints (as `ssh-keygen -l` prints them); 422 for a malformed key. Test them.
 - [ ] Add deploy keys: `Nugitea.DeployKeys` (deploy_keys.json: per repo `%{id, title, key, read_only}`), `GET` and `POST /api/v1/repos/:owner/:repo/keys` and `DELETE .../keys/:id` (admin required), as Gitea's `DeployKey` (modules/structs/repo_key.go). Test them. (SSH next.)
 - [ ] Let deploy keys log in over SSH: `Nugitea.SSH.Keys.is_auth_key/3` also accepts deploy keys, and a session authenticated with one may pull only its repo, and push to it only when the key isn't read-only. Test the decision for both kinds of key and another repo.
 - [ ] Add `mix nugitea mirror list`, printing `direction repo url interval` per mirror from `Nugitea.Mirror.all/0`, sorted by repo. Test it with `ExUnit.CaptureIO` and a tmp state dir.
