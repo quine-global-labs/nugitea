@@ -1627,6 +1627,137 @@ defmodule Nugitea.Router do
     end
   end
 
+  get "/api/v1/repos/search" do
+    # Get query parameters
+    q = conn.params["q"] || ""
+
+    limit =
+      case conn.params["limit"] do
+        nil -> 30
+        val -> String.to_integer(val)
+      end
+
+    # Load directory
+    {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+    # Get all repositories 
+    all_repos = D.repos(dir)
+
+    # Filter accessible repos based on effective access for current caller
+    caller_id = Map.get(conn.assigns, :user_id, nil)
+
+    accessible_repos =
+      Enum.filter(all_repos, fn repo ->
+        D.effective_role(dir, caller_id, repo.id) != nil
+      end)
+
+    # Search repositories by keyword in name and description
+    search_result =
+      if q == "" do
+        accessible_repos
+      else
+        Enum.filter(accessible_repos, fn repo ->
+          # Check if the query matches either the repo name or description (case-insensitive)
+          name_match = String.contains?(String.downcase(repo.slug), String.downcase(q))
+
+          desc_match =
+            String.contains?(String.downcase(repo.description || ""), String.downcase(q))
+
+          name_match or desc_match
+        end)
+      end
+
+    # Apply limit
+    filtered_repos = Enum.take(search_result, limit)
+
+    # Format response according to Gitea's repository structure  
+    formatted_repos =
+      Enum.map(filtered_repos, fn repo ->
+        owner_account = D.account(dir, repo.owner)
+        owner_slug = if owner_account, do: owner_account.slug, else: "unknown"
+
+        # Determine permissions based on effective role
+        role = D.effective_role(dir, caller_id, repo.id) || :read
+
+        permissions = %{
+          admin: role == :admin,
+          push: role in [:admin, :write],
+          pull: true
+        }
+
+        %{
+          id: repo.id,
+          name: repo.slug,
+          full_name: "#{owner_slug}/#{repo.slug}",
+          description: repo.description || "",
+          empty: false,
+          private: repo.visibility == :private,
+          fork: false,
+          template: false,
+          parent: nil,
+          mirror: false,
+          size: 0,
+          language: nil,
+          languages_url: "",
+          html_url: "",
+          url: "",
+          ssh_url: "",
+          clone_url: "",
+          original_url: "",
+          website: "",
+          stars_count: 0,
+          forks_count: 0,
+          watchers_count: 0,
+          branch_count: 0,
+          open_issues_count: length(dir.pull_requests[repo.id] || []),
+          open_pr_counter: length(dir.pull_requests[repo.id] || []),
+          release_counter: 0,
+          default_branch: "main",
+          created_at: DateTime.utc_now(),
+          updated_at: DateTime.utc_now(),
+          permissions: permissions,
+          has_code: true,
+          has_issues: false,
+          internal_tracker: nil,
+          external_tracker: nil,
+          has_wiki: false,
+          external_wiki: nil,
+          has_pull_requests: true,
+          has_projects: false,
+          projects_mode: "repo",
+          has_releases: false,
+          has_packages: false,
+          has_actions: false,
+          ignore_whitespace_conflicts: false,
+          allow_merge_commits: true,
+          allow_rebase: true,
+          allow_rebase_explicit: true,
+          allow_squash_merge: true,
+          allow_fast_forward_only_merge: false,
+          allow_merge_update: false,
+          allow_rebase_update: false,
+          allow_manual_merge: true,
+          autodetect_manual_merge: false,
+          default_delete_branch_after_merge: false,
+          default_merge_style: "merge",
+          default_update_style: "merge",
+          default_allow_maintainer_edit: false,
+          avatar_url: "",
+          internal: false,
+          mirror_interval: "",
+          object_format_name: "sha1",
+          mirror_updated: DateTime.utc_now(),
+          mirror_last_sync_at: DateTime.utc_now(),
+          topics: repo.topics || [],
+          licenses: []
+        }
+      end)
+
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(200, Jason.encode!(formatted_repos))
+  end
+
   patch "/repos/:owner/:repo" do
     owner = conn.params["owner"]
     repo = conn.params["repo"]
