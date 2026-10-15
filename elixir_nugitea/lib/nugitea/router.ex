@@ -831,6 +831,51 @@ defmodule Nugitea.Router do
     end
   end
 
+  post "/api/v1/repos/:owner/:repo/mirror-sync" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+
+    if owner != nil and repo != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        repo_id ->
+          # Check that user has write access to the repo
+          user = conn.assigns.user_id
+
+          role = Nugitea.Accounts.Directory.effective_role(dir, user, repo_id)
+
+          if role != :admin and role != :write do
+            send_resp(conn, 403, "forbidden")
+          else
+            # Check if the repo has a pull mirror
+            mirrors = Nugitea.Mirror.Store.all()
+
+            repo_mirror =
+              Enum.find(mirrors, &(&1.repo == "#{owner}/#{repo}" and &1.direction == :pull))
+
+            case repo_mirror do
+              nil ->
+                send_resp(conn, 404, "not found")
+
+              mirror_entry ->
+                # Run the sync 
+                with :ok <- Nugitea.Mirror.sync(mirror_entry) do
+                  conn
+                  |> put_resp_content_type("application/json")
+                  |> send_resp(200, "{}")
+                end
+            end
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   get "/repos/:owner/:repo" do
     owner = conn.params["owner"]
     repo = conn.params["repo"]
@@ -885,6 +930,16 @@ defmodule Nugitea.Router do
                     0
                 end
 
+              # Check if repo has a pull mirror 
+              mirrors = Nugitea.Mirror.Store.all()
+
+              repo_mirror =
+                Enum.find(mirrors, &(&1.repo == "#{owner}/#{repo}" and &1.direction == :pull))
+
+              # Set mirror properties  
+              is_mirror = repo_mirror != nil
+              original_url = if is_mirror, do: repo_mirror.remote_url, else: ""
+
               response_data = %{
                 id: repo_id,
                 name: repo_info.slug,
@@ -895,7 +950,7 @@ defmodule Nugitea.Router do
                 fork: false,
                 template: false,
                 parent: nil,
-                mirror: false,
+                mirror: is_mirror,
                 size: size,
                 language: nil,
                 languages_url: "",
@@ -903,7 +958,7 @@ defmodule Nugitea.Router do
                 url: "",
                 ssh_url: "",
                 clone_url: "",
-                original_url: "",
+                original_url: original_url,
                 website: "",
                 stars_count: 0,
                 forks_count: 0,
