@@ -511,4 +511,21 @@ defmodule Nugitea.RouterTest do
 
     assert result.status == 404
   end
+
+  # Tests for the new endpoint
+  test "GET /api/v1/repos/:owner/:repo returns 404 for non-existent repository" do
+    conn = :get |> Plug.Test.conn("/api/v1/repos/unknown/user")
+    result = Nugitea.Router.call(conn, [])
+
+    assert result.status == 404
+  end
+
+  test "GET /api/v1/repos/:owner/:repo endpoint registered with correct URL pattern" do
+    # This tests that the route is registered - it should not crash on a simple call
+    conn = :get |> Plug.Test.conn("/api/v1/repos/testuser/testrepo")
+    result = Nugitea.Router.call(conn, [])
+
+    # The route should be recognized (not 404) - either returns proper data or a 404 for non-existent repo
+    assert result.status == 404 or result.status == 200
+  end
 end

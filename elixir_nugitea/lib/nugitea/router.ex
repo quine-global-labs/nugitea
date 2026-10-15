@@ -1015,6 +1015,163 @@ defmodule Nugitea.Router do
     end
   end
 
+  get "/api/v1/repos/:owner/:repo" do
+    owner = conn.params["owner"]
+    repo = conn.params["repo"]
+
+    if owner != nil and repo != nil do
+      {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+      case Client.resolve(dir, "#{owner}/#{repo}") do
+        nil ->
+          send_resp(conn, 404, "not found")
+
+        repo_id ->
+          # Get repository information from accounts directory
+          repo_info = dir.repos[repo_id]
+
+          if repo_info == nil do
+            send_resp(conn, 404, "not found")
+          else
+            # Get the current user (nil for anonymous)
+            user = conn.assigns.user_id
+
+            # Determine effective role using Directory.effective_role/3
+            role = Nugitea.Accounts.Directory.effective_role(dir, user, repo_id)
+
+            # If role is nil (private repo the caller can't see), return 404 
+            if role == nil do
+              send_resp(conn, 404, "not found")
+            else
+              # Get repository path for storage access
+              repo_path = "#{owner}/#{repo}"
+
+              # Get branch count using existing branches command
+              branch_count =
+                case Client.branches(repo_path) do
+                  {:ok, branches} ->
+                    length(branches)
+
+                  {:error, _} ->
+                    0
+                end
+
+              # Determine if repository is empty (has no branches)
+              empty = branch_count == 0
+
+              # Get the repository size using Storage.size
+              size =
+                case Client.size(repo_path) do
+                  {:ok, size_in_kib} ->
+                    size_in_kib
+
+                  {:error, _} ->
+                    0
+                end
+
+              # Get commit count
+              commit_count =
+                case Client.commit_count(repo_path) do
+                  {:ok, count} ->
+                    count
+
+                  {:error, _} ->
+                    0
+                end
+
+              # Check if repo has a pull mirror 
+              mirrors = Nugitea.Mirror.Store.all()
+
+              repo_mirror =
+                Enum.find(mirrors, &(&1.repo == "#{owner}/#{repo}" and &1.direction == :pull))
+
+              # Set mirror properties  
+              is_mirror = repo_mirror != nil
+              original_url = if is_mirror, do: repo_mirror.remote_url, else: ""
+
+              response_data = %{
+                id: repo_id,
+                name: repo_info.slug,
+                full_name: "#{owner}/#{repo}",
+                description: repo_info.description || "",
+                empty: empty,
+                private: repo_info.visibility == :private,
+                fork: false,
+                template: false,
+                parent: nil,
+                mirror: is_mirror,
+                size: size,
+                language: nil,
+                languages_url: "",
+                html_url: "",
+                url: "",
+                ssh_url: "",
+                clone_url: "",
+                original_url: original_url,
+                website: "",
+                stars_count: 0,
+                forks_count: 0,
+                watchers_count: 0,
+                branch_count: branch_count,
+                commit_count: commit_count,
+                open_issues_count: length(dir.pull_requests[repo_id] || []),
+                open_pr_counter: length(dir.pull_requests[repo_id] || []),
+                release_counter: 0,
+                default_branch: "main",
+                created_at: DateTime.utc_now(),
+                updated_at: DateTime.utc_now(),
+                permissions: %{
+                  admin: role == :admin,
+                  push: role == :admin || role == :write,
+                  pull: true
+                },
+                has_code: true,
+                has_issues: false,
+                internal_tracker: nil,
+                external_tracker: nil,
+                has_wiki: false,
+                external_wiki: nil,
+                has_pull_requests: true,
+                has_projects: false,
+                projects_mode: "repo",
+                has_releases: false,
+                has_packages: false,
+                has_actions: false,
+                ignore_whitespace_conflicts: false,
+                allow_merge_commits: true,
+                allow_rebase: true,
+                allow_rebase_explicit: true,
+                allow_squash_merge: true,
+                allow_fast_forward_only_merge: false,
+                allow_merge_update: false,
+                allow_rebase_update: false,
+                allow_manual_merge: true,
+                autodetect_manual_merge: false,
+                default_delete_branch_after_merge: false,
+                default_merge_style: "merge",
+                default_update_style: "merge",
+                default_allow_maintainer_edit: false,
+                avatar_url: "",
+                internal: false,
+                mirror_interval: "",
+                object_format_name: "sha1",
+                mirror_updated: DateTime.utc_now(),
+                mirror_last_sync_at: DateTime.utc_now(),
+                topics: repo_info.topics || [],
+                licenses: []
+              }
+
+              conn
+              |> put_resp_content_type("application/json")
+              |> send_resp(200, Jason.encode!(response_data))
+            end
+          end
+      end
+    else
+      send_resp(conn, 404, "not found")
+    end
+  end
+
   get "/repos/:owner/:repo" do
     owner = conn.params["owner"]
     repo = conn.params["repo"]
