@@ -116,6 +116,34 @@ defmodule Nugitea.Accounts.Directory do
     end
   end
 
+  @doc "Add a deploy key for a repository"
+  def add_deploy_key(dir, repo_id, key, read_only) do
+    # Check that the repository exists
+    case Map.get(dir.repos, repo_id) do
+      nil ->
+        {:error, "repository not found"}
+
+      _ ->
+        # Deploy keys are stored in the same structure as user keys but associated with a 
+        # repo ID rather than a user ID, similar to how it would be in Gitea
+        deploy_keys = dir.user_keys[repo_id] || []
+        # Avoid adding duplicate keys
+        if Enum.any?(deploy_keys, &(&1.key == key)) do
+          {:ok, dir}
+        else
+          updated_user_keys =
+            Map.put(dir.user_keys, repo_id, deploy_keys ++ [%{key: key, read_only: read_only}])
+
+          {:ok, %{dir | user_keys: updated_user_keys}}
+        end
+    end
+  end
+
+  @doc "Get deploy keys for a repository by ID"
+  def get_deploy_keys(dir, repo_id) do
+    dir.user_keys[repo_id]
+  end
+
   # ---- lookups ----------------------------------------------------------
 
   def account(dir, id), do: dir.accounts[id]
