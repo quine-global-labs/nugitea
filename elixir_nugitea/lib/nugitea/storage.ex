@@ -117,10 +117,18 @@ defmodule Nugitea.Storage do
 
   `protocol` is the client's Git-Protocol header (e.g. "version=2"), passed
   to git as GIT_PROTOCOL; `gzip` inflates gzipped HTTP request bodies.
+
+  For receive-pack operations, tracks refs before/after to detect pushes and sends
+  `{ref, :pushed, [%{ref, before, after}]}` messages to the reply_to process when changes occur.
   """
   def exchange(reply_to, ref, path, service, opts) do
     {:ok, dir} = existing(path)
     {:ok, cmd} = service(service)
+
+    # For receive-pack, we track refs before and after the operation
+    is_receive_pack = cmd == "receive-pack"
+    before_refs = if is_receive_pack, do: get_refs(dir), else: nil
+
     args = if opts[:stateless], do: [cmd, "--stateless-rpc", dir], else: [cmd, dir]
 
     git = System.find_executable("git")
@@ -129,10 +137,10 @@ defmodule Nugitea.Storage do
       :exec.run([git | args], [:stdin, :stdout, :monitor, {:env, protocol_env(opts[:protocol])}])
 
     inflater = opts[:gzip] && inflater()
-    loop(reply_to, ref, os_pid, inflater)
+    loop(reply_to, ref, os_pid, inflater, is_receive_pack, before_refs, path)
   end
 
-  defp loop(reply_to, ref, os_pid, inflater) do
+  defp loop(reply_to, ref, os_pid, inflater, is_receive_pack, before_refs, path) do
     receive do
       {^ref, :input, chunk} ->
         :exec.send(
@@ -140,18 +148,51 @@ defmodule Nugitea.Storage do
           if(inflater, do: IO.iodata_to_binary(:zlib.inflate(inflater, chunk)), else: chunk)
         )
 
-        loop(reply_to, ref, os_pid, inflater)
+        loop(reply_to, ref, os_pid, inflater, is_receive_pack, before_refs, path)
 
       {^ref, :eof} ->
         if inflater, do: :zlib.close(inflater)
         :exec.send(os_pid, :eof)
-        loop(reply_to, ref, os_pid, nil)
+
+        # Check if this was a receive-pack operation and track changes
+        if is_receive_pack && before_refs do
+          case get_refs(path) do
+            {:ok, after_refs} ->
+              changed_refs = find_changed_refs(before_refs, after_refs)
+
+              unless Enum.empty?(changed_refs) do
+                send(reply_to, {ref, :pushed, changed_refs})
+              end
+
+            _ ->
+              # Do nothing if we can't get the refs
+              nil
+          end
+        end
+
+        loop(reply_to, ref, os_pid, nil, is_receive_pack, before_refs, path)
 
       {:stdout, ^os_pid, chunk} ->
         send(reply_to, {ref, :output, chunk})
-        loop(reply_to, ref, os_pid, inflater)
+        loop(reply_to, ref, os_pid, inflater, is_receive_pack, before_refs, path)
 
       {:DOWN, ^os_pid, :process, _, reason} ->
+        # Check if this was a receive-pack operation and track changes
+        if is_receive_pack && before_refs do
+          case get_refs(path) do
+            {:ok, after_refs} ->
+              changed_refs = find_changed_refs(before_refs, after_refs)
+
+              unless Enum.empty?(changed_refs) do
+                send(reply_to, {ref, :pushed, changed_refs})
+              end
+
+            _ ->
+              # Do nothing if we can't get the refs
+              nil
+          end
+        end
+
         send(reply_to, {ref, :exit, exit_status(reason)})
     end
   end
@@ -316,6 +357,46 @@ defmodule Nugitea.Storage do
       {out, 0} -> {:ok, out}
       {_, status} -> {:error, "git #{hd(args)} exited #{status}"}
     end
+  end
+
+  # Get the current refs for a repository to track changes
+  defp get_refs(dir) do
+    case capture(dir, ["for-each-ref", "--format=%(refname) %(objectname)", "refs/heads"]) do
+      {:ok, out} ->
+        refs =
+          String.split(out, "\n", trim: true)
+          |> Enum.map(fn line ->
+            [refname, objectname] = String.split(line, " ", parts: 2)
+            %{ref: refname, sha: objectname}
+          end)
+
+        {:ok, refs}
+
+      {:error, _} = err ->
+        err
+    end
+  end
+
+  # Find references that have changed between before and after snapshots
+  defp find_changed_refs(before_refs, after_refs) do
+    before_map = Enum.into(before_refs, %{}, fn %{ref: r, sha: s} -> {r, s} end)
+
+    # Find all refs that were either new or changed by comparing with before_refs
+    Enum.filter(after_refs, fn %{ref: ref, sha: after_sha} ->
+      case Map.get(before_map, ref) do
+        nil ->
+          # New reference
+          true
+
+        before_sha when before_sha != after_sha ->
+          # Changed reference  
+          true
+
+        _ ->
+          # No change
+          false
+      end
+    end)
   end
 
   @doc "Delete a repository directory from disk."
