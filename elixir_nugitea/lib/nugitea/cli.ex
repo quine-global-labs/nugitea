@@ -173,14 +173,14 @@ defmodule Nugitea.CLI do
     with {:ok, dir} <- Accounts.Store.load(Accounts.state_dir()),
          principal_id <- D.resolve(dir, principal),
          resource_id <- D.resolve(dir, resource) do
-      # Use Directory.grant to implement the command
-      case D.grant(dir, {:user, principal_id}, {:repo, resource_id}, role) do
-        {:ok, new_dir} ->
-          Accounts.Store.update(Accounts.state_dir(), fn _ -> new_dir end)
-          :ok
-
-        {:error, reason} ->
-          {:error, "grant failed: #{reason}"}
+      # The change is made inside update, which saves it: a function
+      # returning the bare directory saved nothing.
+      case Accounts.Store.update(
+             Accounts.state_dir(),
+             &D.grant(&1, {:user, principal_id}, {:repo, resource_id}, role)
+           ) do
+        :ok -> :ok
+        {:error, reason} -> {:error, "grant failed: #{reason}"}
       end
     end
   end
@@ -211,8 +211,7 @@ defmodule Nugitea.CLI do
 
     with {:ok, dir} <- Accounts.Store.load(Accounts.state_dir()),
          user_id <- D.resolve(dir, user_login),
-         {:ok, updated_dir} <- D.add_user_key(dir, user_id, key) do
-      Accounts.Store.update(Accounts.state_dir(), fn _ -> updated_dir end)
+         :ok <- Accounts.Store.update(Accounts.state_dir(), &D.add_user_key(&1, user_id, key)) do
       IO.puts("SSH key added for #{user_login}")
     end
   end
