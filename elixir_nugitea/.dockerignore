@@ -1,0 +1,7 @@
+_build
+deps
+data
+cover
+doc
+tmp
+test
