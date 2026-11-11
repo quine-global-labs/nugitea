@@ -1,0 +1,12 @@
+{
+  "users": ["alice", "bob"],
+  "orgs": [
+    { "path": "acme", "visibility": "public", "members": { "alice": "owner", "bob": "member" } }
+  ],
+  "repos": [
+    { "path": "alice/hello", "visibility": "public" },
+    { "path": "alice/secret", "visibility": "private" },
+    { "path": "acme/api", "visibility": "public" }
+  ],
+  "tokens": ["alice", "bob"]
+}
