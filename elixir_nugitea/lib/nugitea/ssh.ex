@@ -171,11 +171,20 @@ defmodule Nugitea.SSH do
            {:ok, dir} <- Accounts.Store.load(Accounts.state_dir()),
            {:ok, repo} <- found(Client.resolve(dir, raw), raw),
            :ok <-
-             if(Nugitea.Auth.allow?(verb, state.user_id, repo),
+             if(Nugitea.Auth.allow?(verb, session_user(dir, state.cm), repo),
                do: :ok,
                else: {:error, "forbidden"}
              ) do
         {:ok, Client.start_exchange(repo, verb, protocol: state.protocol)}
+      end
+    end
+
+    # The account whose key authenticated this session (Keys.is_auth_key/3
+    # only lets a login in with one of its own keys).
+    defp session_user(dir, cm) do
+      case :ssh.connection_info(cm, [:user]) do
+        [user: user] -> Accounts.Directory.resolve(dir, to_string(user))
+        _ -> nil
       end
     end
 
