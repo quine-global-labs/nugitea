@@ -1,0 +1,61 @@
+# On every push to main that touches them: build nugitea's two images,
+# push them to the forge's registry, and open petersweb-infra PRs that pin
+# them (quine-global/site-image). Merging a PR deploys it to
+# nugitea.in.quineglobal.com (petersweb-infra, nixos/arion-nugitea).
+#
+#   nugitea      elixir_nugitea, the server (HTTP, SSH, both tiers)
+#   nugitea-web  rust_nugitea/web, the Nuxt frontend
+#
+# Runs on the forge VM's ubuntu-latest runner, which is arm64 like the VM
+# nugitea runs on, in a privileged Podman container (vfs storage).
+#
+# Secrets: REGISTRY_USERNAME and REGISTRY_PASSWORD (package write),
+# INFRA_TOKEN (push a branch to Cold-Air-Networks/petersweb-infra and open
+# a PR there).
+name: images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'elixir_nugitea/**'
+      - 'rust_nugitea/web/**'
+      - '.forgejo/workflows/images.yml'
+  workflow_dispatch:
+
+jobs:
+  image:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: nugitea
+            context: elixir_nugitea
+          - name: nugitea-web
+            context: rust_nugitea/web
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/podman/stable
+      options: --privileged
+    env:
+      STORAGE_DRIVER: vfs
+    steps:
+      - name: Tools
+        run: dnf install -y --quiet git-core jq curl
+      # A plain clone: the container has no Node for actions/checkout. The
+      # forge's public address: this runner is told localhost:3000, which
+      # the container can't reach.
+      - name: Checkout
+        run: |
+          git clone -q "https://ci:${{ github.token }}@forge.in.quineglobal.com/${{ github.repository }}.git" .
+          git checkout -q "${{ github.sha }}"
+      - uses: https://forge.in.quineglobal.com/quine-global/site-image@v1
+        with:
+          image: forge.in.quineglobal.com/quine-global-labs/${{ matrix.name }}
+          context: ${{ matrix.context }}
+          infra-file: nixos/arion-nugitea/arion-compose.nix
+          name: ${{ matrix.name }}
+          platform: linux/arm64
+          registry-username: ${{ secrets.REGISTRY_USERNAME }}
+          registry-password: ${{ secrets.REGISTRY_PASSWORD }}
+          infra-token: ${{ secrets.INFRA_TOKEN }}
