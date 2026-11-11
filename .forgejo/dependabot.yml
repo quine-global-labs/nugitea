@@ -1,17 +1,18 @@
 # Dependabot on the forge (quine-global-labs/dependabot-core, forgejo/README.md):
 # Dependabot's version 2 format; every daily run checks everything (no
 # schedules, groups or ignore rules yet).
+#
+# The Elixir app, and the Nuxt frontend it serves (still under
+# rust_nugitea/web); rust_nugitea's own crate is deprecated, so not checked.
 version: 2
 updates:
-  - package-ecosystem: cargo
-    directory: /rust_nugitea
-  - package-ecosystem: docker
+  - package-ecosystem: mix
+    directory: /elixir_nugitea
+  - package-ecosystem: npm
     directories:
-      - /rust_nugitea
       - /rust_nugitea/web
-  - package-ecosystem: docker-compose
-    directory: /rust_nugitea
+      - /e2e
+  - package-ecosystem: docker
+    directory: /rust_nugitea/web
   - package-ecosystem: gomod
     directory: /
-  - package-ecosystem: npm
-    directory: /rust_nugitea/web
