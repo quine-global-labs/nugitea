@@ -23,6 +23,7 @@ defmodule Nugitea.Storage.Client do
   def set_default_branch(path, branch), do: call(:set_default_branch, [path, branch])
   def size(path), do: call(:size, [path])
   def commits(path, ref, opts), do: call(:commits, [path, ref, opts])
+  def tags(path), do: call(:tags, [path])
   def commit_diff(path, sha), do: call(:commit_diff, [path, sha])
   def commit_patch(path, sha), do: call(:commit_patch, [path, sha])
   def changed_files(path, base, head), do: call(:changed_files, [path, base, head])

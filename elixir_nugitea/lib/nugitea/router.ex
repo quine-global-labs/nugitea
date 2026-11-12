@@ -7,6 +7,9 @@ defmodule Nugitea.Router do
     * `/-/session`: web sign-in (`POST`, a login and password) and sign-out
       (`DELETE`), with a session cookie (`Nugitea.Accounts.Sessions`).
       Account names can't start with `-`, so `/-/` can't be a repo path;
+    * `/-/raw` and `/-/diff`: a file's content and a commit's diff or patch,
+      for the web UI's Gitea-shaped `/raw/...` and `/commit/{sha}.diff`
+      URLs (it works out the repo and ref, then fetches these);
     * git's smart-HTTP protocol for everything else, as Gitea's
       routers/web/repo/githttp.go serves it:
 
@@ -87,6 +90,55 @@ defmodule Nugitea.Router do
   forward "/graphql",
     to: Absinthe.Plug.GraphiQL,
     init_opts: [schema: Nugitea.GraphQL.Schema, interface: :simple, json_codec: Jason]
+
+  # ?repo=OWNER/NAME&ref=REF&path=FILE[&download=1], served as Gitea serves
+  # raw files (modules/httplib/serve.go): text as text/plain (an HTML file
+  # never renders), images, audio, video and PDF as themselves (SVG
+  # sandboxed by CSP), the rest as a download; never sniffed. A repo the
+  # caller can't read is 404, as if it didn't exist.
+  get "/-/raw" do
+    with %{"repo" => repo_path, "ref" => ref, "path" => file} <- conn.query_params,
+         {:ok, repo} <- readable_repo(repo_path, conn.assigns.user_id),
+         {:ok, %{content: content}} <- Client.blob(repo, ref, file) do
+      {type, csp} = raw_type(file, content)
+      disposition = if conn.query_params["download"], do: "attachment", else: "inline"
+
+      conn
+      |> put_resp_content_type(type, nil)
+      |> put_resp_header("x-content-type-options", "nosniff")
+      |> then(&if(csp, do: put_resp_header(&1, "content-security-policy", csp), else: &1))
+      |> put_resp_header(
+        "content-disposition",
+        ~s(#{disposition}; filename="#{file |> Path.basename() |> String.replace(~s("), "")}")
+      )
+      |> send_resp(200, content)
+    else
+      _ -> send_resp(conn, 404, "not found")
+    end
+  end
+
+  # ?repo=OWNER/NAME&sha=SHA&format=diff|patch, as Gitea's
+  # /commit/{sha}.diff and .patch.
+  get "/-/diff" do
+    show =
+      case conn.query_params["format"] do
+        "diff" -> &Client.commit_diff/2
+        "patch" -> &Client.commit_patch/2
+        _ -> nil
+      end
+
+    with %{"repo" => repo_path, "sha" => sha} <- conn.query_params,
+         true <- show != nil and sha =~ ~r/\A[0-9a-fA-F]{4,64}\z/,
+         {:ok, repo} <- readable_repo(repo_path, conn.assigns.user_id),
+         {:ok, text} <- show.(repo, sha) do
+      conn
+      |> put_resp_content_type("text/plain; charset=utf-8", nil)
+      |> put_resp_header("x-content-type-options", "nosniff")
+      |> send_resp(200, text)
+    else
+      _ -> send_resp(conn, 404, "not found")
+    end
+  end
 
   get "/*glob" do
     conn = fetch_query_params(conn)
@@ -252,6 +304,41 @@ defmodule Nugitea.Router do
          false <- D.org?(account),
          do: id,
          else: (_ -> nil)
+  end
+
+  # The repo at `path` (owner/name), if `user` may read it.
+  defp readable_repo(path, user) do
+    {:ok, dir} = Accounts.Store.load(Accounts.state_dir())
+
+    case Client.resolve(dir, path <> ".git") do
+      nil -> :error
+      repo -> if Nugitea.Auth.allow?("upload-pack", user, repo), do: {:ok, repo}, else: :error
+    end
+  end
+
+  @browsable ~w(image audio video)
+
+  # A raw file's Content-Type, and the CSP that goes with it, if any.
+  defp raw_type(file, content) do
+    ext_type = MIME.from_path(file)
+    text? = String.valid?(content) and not String.contains?(content, <<0>>)
+
+    cond do
+      ext_type == "image/svg+xml" and String.contains?(content, "<svg") ->
+        {ext_type, "default-src 'none'; style-src 'unsafe-inline'; sandbox"}
+
+      text? ->
+        {"text/plain; charset=utf-8", nil}
+
+      ext_type == "application/pdf" ->
+        {ext_type, "default-src 'none'; style-src 'unsafe-inline'"}
+
+      ext_type |> String.split("/") |> hd() |> then(&(&1 in @browsable)) ->
+        {ext_type, nil}
+
+      true ->
+        {"application/octet-stream", nil}
+    end
   end
 
   # Behind nginx the hop to us is plain HTTP; it says what the browser used.

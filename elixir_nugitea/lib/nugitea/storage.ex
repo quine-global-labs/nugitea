@@ -258,6 +258,20 @@ defmodule Nugitea.Storage do
     end
   end
 
+  @doc "Tag names, newest first."
+  def tags(path) do
+    with {:ok, dir} <- existing(path),
+         {:ok, out} <-
+           capture(dir, [
+             "for-each-ref",
+             "--sort=-creatordate",
+             "--format=%(refname:short)",
+             "refs/tags"
+           ]) do
+      {:ok, String.split(out, "\n", trim: true)}
+    end
+  end
+
   @doc """
   Returns branch tips for all branches including refname, objectname (commit hash) and subject.
   Format matches git for-each-ref output with %(refname) %(objectname) %(subject).
@@ -519,10 +533,11 @@ defmodule Nugitea.Storage do
   def commits(path, ref, opts) do
     with {:ok, dir} <- existing(path),
          :ok <- no_leading_dash([ref]) do
+      # One record per commit, ended by \x1e: the full message (%B) can hold
+      # newlines. Dates in strict ISO 8601 (%aI, %cI), as Gitea's API gives.
       base_args = [
         "log",
-        "--format=%H%x00%P%x00%an%x00%ae%x00%ad%x00%cn%x00%ce%x00%cd%x00%s",
-        "--date=iso"
+        "--format=%H%x00%P%x00%an%x00%ae%x00%aI%x00%cn%x00%ce%x00%cI%x00%B%x1e"
       ]
 
       # The ref goes before the path filter's `--`, or git reads it as a path.
@@ -536,9 +551,13 @@ defmodule Nugitea.Storage do
       case capture(dir, full_args) do
         {:ok, out} ->
           commits =
-            String.split(out, "\n", trim: true)
+            out
+            |> String.split("\x1e")
+            |> Enum.map(&String.trim_leading(&1, "\n"))
+            |> Enum.reject(&(&1 == ""))
             |> Enum.map(fn commit_line ->
               parts = String.split(commit_line, "\x00", parts: 9)
+              message = parts |> Enum.at(8, "") |> String.trim_trailing()
 
               [
                 sha: Enum.at(parts, 0),
@@ -549,7 +568,8 @@ defmodule Nugitea.Storage do
                 committer_name: Enum.at(parts, 5),
                 committer_email: Enum.at(parts, 6),
                 committer_date: Enum.at(parts, 7),
-                message: Enum.at(parts, 8)
+                message: message,
+                subject: message |> String.split("\n", parts: 2) |> hd()
               ]
             end)
 
@@ -577,11 +597,25 @@ defmodule Nugitea.Storage do
     end
   end
 
-  @doc "Get the diff for a commit as text/plain"
+  @doc """
+  A commit's diff as text/plain: against its first parent, as Gitea shows
+  it, renames detected, and against nothing for a repo's first commit
+  (`sha^` doesn't exist there).
+  """
   def commit_diff(path, sha) do
     with {:ok, dir} <- existing(path),
          :ok <- no_leading_dash([sha]),
-         {:ok, out} <- capture(dir, ["diff", "#{sha}^", sha]) do
+         {:ok, out} <-
+           capture(dir, [
+             "diff-tree",
+             "-p",
+             "--root",
+             "-M",
+             "--no-commit-id",
+             "-m",
+             "--first-parent",
+             sha
+           ]) do
       {:ok, out}
     end
   end

@@ -95,14 +95,76 @@ defmodule Nugitea.GraphQL.Resolvers do
     {:ok, dir |> D.repo(id) |> Map.fetch!(:owner) |> owner(dir, viewer)}
   end
 
-  @doc "`main` if it exists, else `master`, else the first branch, else null."
+  @doc """
+  The branch HEAD names, as Gitea's default branch; if that branch doesn't
+  exist, `main`, else `master`, else the first branch; null when empty.
+  """
   def default_branch_ref(%{path: path}, _, _) do
     with {:ok, branches} <- Client.branches(path) do
+      head =
+        case Client.default_branch(path) do
+          {:ok, b} -> b
+          _ -> nil
+        end
+
       default =
-        Enum.find(["main", "master"], &(&1 in branches)) || Enum.min(branches, fn -> nil end)
+        if(head in branches, do: head) ||
+          Enum.find(["main", "master"], &(&1 in branches)) || Enum.min(branches, fn -> nil end)
 
       {:ok, default && %{name: default}}
     end
+  end
+
+  def tags(%{path: path}, _, _) do
+    with {:ok, tags} <- Client.tags(path), do: {:ok, Enum.map(tags, &%{name: &1})}
+  end
+
+  @doc "A page of commits from `ref`, optionally only those touching `path`."
+  def history(%{path: path}, %{ref: ref} = args, _) do
+    first = (args[:first] || 30) |> max(1) |> min(100)
+    skip = max(args[:skip] || 0, 0)
+    opts = [limit: first + 1, skip: skip] ++ if(p = args[:path], do: [path: p], else: [])
+
+    case Client.commits(path, ref, opts) do
+      {:ok, commits} ->
+        {:ok,
+         %{
+           nodes: commits |> Enum.take(first) |> Enum.map(&commit(path, &1)),
+           has_next_page: length(commits) > first
+         }}
+
+      # An unknown ref, or one git rejects: no commits, as for a bad path.
+      {:error, _} ->
+        {:ok, %{nodes: [], has_next_page: false}}
+    end
+  end
+
+  def commit(%{path: path}, %{oid: oid}, _) do
+    with true <- oid =~ ~r/\A[0-9a-fA-F]{4,64}\z/,
+         {:ok, [c]} <- Client.commits(path, oid, limit: 1) do
+      {:ok, commit(path, c)}
+    else
+      _ -> {:ok, nil}
+    end
+  end
+
+  def commit_diff(%{repo_path: path, oid: oid}, _, _), do: Client.commit_diff(path, oid)
+
+  defp commit(path, c) do
+    [headline | body] = String.split(c[:message], "\n", parts: 2)
+
+    %{
+      __type: :commit,
+      repo_path: path,
+      oid: c[:sha],
+      abbreviated_oid: String.slice(c[:sha], 0, 10),
+      message: c[:message],
+      message_headline: headline,
+      message_body: body |> List.first("") |> String.trim(),
+      author: %{name: c[:author_name], email: c[:author_email], date: c[:author_date]},
+      committer: %{name: c[:committer_name], email: c[:committer_email], date: c[:committer_date]},
+      parents: c[:parents]
+    }
   end
 
   def refs(%{path: path}, _, _) do

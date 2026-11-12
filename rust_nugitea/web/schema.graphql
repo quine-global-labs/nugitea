@@ -71,9 +71,10 @@ type Repository implements UniformResourceLocatable {
 	visibility: RepositoryVisibility!
 	isPrivate: Boolean!
 	"""
-	`main` if it exists, else `master`, else whichever branch sorts
-	first, else `null` — since HEAD in a freshly created bare repo
-	doesn't reliably reflect what was actually pushed.
+	The branch HEAD names (Gitea's default branch: `main` for a new repo,
+	or the first push's branch), or, if HEAD names no branch that exists,
+	`main`, else `master`, else whichever branch sorts first; `null` for
+	an empty repo.
 	"""
 	defaultBranchRef: Ref
 	refs: [Ref!]!
@@ -91,6 +92,56 @@ type Repository implements UniformResourceLocatable {
 	the shape of the path string.
 	"""
 	object(expression: String!): GitObject
+	"""
+	Tags, newest first (nugitea extension; GitHub has refs(refPrefix:)).
+	"""
+	tags: [Ref!]!
+	"""
+	Commits reachable from `ref` (a branch, tag or commit), newest first,
+	only those touching `path` if given; `first` (default 30, at most
+	100) after skipping `skip`. A nugitea extension, for Gitea's
+	/commits/ pages; GitHub has it under ref.target.history.
+	"""
+	history(ref: String!, path: String, first: Int, skip: Int): CommitHistory!
+	"""
+	A commit by its full or abbreviated oid (nugitea extension; GitHub
+	has object(oid:)), or null if there's no such commit.
+	"""
+	commit(oid: String!): Commit
+}
+
+type CommitHistory {
+	nodes: [Commit!]!
+	hasNextPage: Boolean!
+}
+
+type Commit implements GitObject {
+	oid: String!
+	abbreviatedOid: String!
+	message: String!
+	messageHeadline: String!
+	messageBody: String!
+	author: GitActor!
+	committer: GitActor!
+	"""
+	Parent oids (GitHub's is a connection).
+	"""
+	parents: [String!]!
+	"""
+	The unified diff against the first parent (against nothing for a
+	repo's first commit), as Gitea's /commit/{sha}.diff (nugitea
+	extension).
+	"""
+	diff: String!
+}
+
+type GitActor {
+	name: String!
+	email: String!
+	"""
+	ISO 8601.
+	"""
+	date: String!
 }
 
 type RepositoryConnection {

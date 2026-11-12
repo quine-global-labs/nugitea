@@ -39,8 +39,12 @@ defmodule Nugitea.GraphQL.Schema do
         default_branch_ref: &R.default_branch_ref/3,
         refs: &R.refs/3,
         files: &R.files/3,
-        object: &R.object/3
+        object: &R.object/3,
+        tags: &R.tags/3,
+        history: &R.history/3,
+        commit: &R.commit/3
       },
+      commit: %{diff: &R.commit_diff/3},
       user: %{repositories: &R.owned_repositories/3},
       organization: %{
         repositories: &R.owned_repositories/3,
