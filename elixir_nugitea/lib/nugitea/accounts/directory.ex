@@ -29,7 +29,16 @@ defmodule Nugitea.Accounts.Directory do
   alias Nugitea.Names
 
   # First path segments taken by app-tier and web routes.
-  @reserved ~w(api enterprises graphql login repos settings)
+  # Top-level account names that would collide with a page or API path:
+  # nugitea's own (enterprises, graphql, repos, settings) and Gitea's
+  # reservedUsernames (models/user/user.go), whose URLs nugitea's web UI
+  # follows (/repo/create, /user/settings, ...). Plus its patterns, below.
+  @reserved ~w(api enterprises graphql login repos settings
+               . .. .well-known metrics v2 assets attachments avatar avatars
+               repo-avatars captcha org repo user explore issues pulls
+               milestones notifications favicon.ico manifest.json robots.txt
+               sitemap.xml ssh_info swagger.v1.json ghost gitea-actions)
+  @reserved_suffixes ~w(.keys .gpg .rss .atom .png)
   @roles [:read, :triage, :write, :maintain, :admin]
   @org_roles [:billing_manager, :member, :owner]
   @visibilities [:private, :internal, :public]
@@ -204,7 +213,9 @@ defmodule Nugitea.Accounts.Directory do
            ),
          :ok <-
            check(
-             parent != nil or not Enum.any?(@reserved, &eq_ci?(&1, slug)),
+             parent != nil or
+               not (Enum.any?(@reserved, &eq_ci?(&1, slug)) or
+                      String.ends_with?(String.downcase(slug), @reserved_suffixes)),
              "slug #{inspect(slug)} is reserved"
            ) do
       check(not taken, "slug #{inspect(slug)} is already taken")

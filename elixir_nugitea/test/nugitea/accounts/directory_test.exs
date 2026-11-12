@@ -53,6 +53,15 @@ defmodule Nugitea.Accounts.DirectoryTest do
     for slug <- ["repos", "foo.git", "-foo", "a/b"], do: assert(err?(D.add_user(%D{}, slug)))
   end
 
+  test "rejects Gitea's reserved names at the top level, the paths the web UI uses" do
+    for slug <- ["repo", "User", "org", "explore", "ghost", "alice.keys", "x.PNG"],
+        do: assert(err?(D.add_user(%D{}, slug)), slug)
+
+    # Only top-level names collide with pages; inside an org they're fine.
+    {:ok, d, acme} = D.add_org(%D{}, "acme", nil, :public)
+    assert {:ok, _, _} = D.add_org(d, "repo", acme, :public)
+  end
+
   test "structural invariants" do
     f = fixture()
     # users can't parent orgs
