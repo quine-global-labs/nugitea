@@ -2,9 +2,10 @@ defmodule Nugitea.GraphQL.Resolvers do
   @moduledoc """
   Resolvers for `Nugitea.GraphQL.Schema`. Each root field loads one snapshot
   of the accounts directory, and every object it returns carries that
-  snapshot, so a response is consistent with itself. Repos the authorizer
-  won't let you pull resolve to null or are left out of lists, the way
-  GitHub returns null for a repo you can't see.
+  snapshot, so a response is consistent with itself, and the caller (the
+  signed-in user from the router's context, or nil). Repos the authorizer
+  won't let the caller pull resolve to null or are left out of lists, the
+  way GitHub returns null for a repo you can't see.
   """
 
   alias Nugitea.Accounts
@@ -16,14 +17,19 @@ defmodule Nugitea.GraphQL.Resolvers do
   @doc "Interfaces (RepositoryOwner, GitObject, ...): every object carries its concrete type."
   def resolve_type(%{__type: type}, _), do: type
 
-  def repository(_, %{owner: owner, name: name}, _) do
+  def repository(_, %{owner: owner, name: name}, r) do
     dir = snapshot()
-    {:ok, dir |> D.resolve_repo("#{owner}/#{name}") |> repo(dir)}
+    {:ok, dir |> D.resolve_repo("#{owner}/#{name}") |> repo(dir, viewer(r))}
   end
 
-  def repository_owner(_, %{login: login}, _) do
+  def repository_owner(_, %{login: login}, r) do
     dir = snapshot()
-    {:ok, dir |> D.resolve(login) |> owner(dir)}
+    {:ok, dir |> D.resolve(login) |> owner(dir, viewer(r))}
+  end
+
+  @doc "The signed-in user, or null (nugitea's is nullable: GitHub has no anonymous access)."
+  def viewer(_, _, r) do
+    {:ok, if(user = viewer(r), do: owner(user, snapshot(), user))}
   end
 
   def user(p, args, r), do: only(repository_owner(p, args, r), :user)
@@ -37,8 +43,9 @@ defmodule Nugitea.GraphQL.Resolvers do
   segments until one names a repo, then stops, so `/a/repo/tree/main/src`
   still resolves to the repo.
   """
-  def resource(_, %{url: url}, _) do
+  def resource(_, %{url: url}, r) do
     dir = snapshot()
+    viewer = viewer(r)
     segs = url_segments(url)
 
     found =
@@ -52,35 +59,40 @@ defmodule Nugitea.GraphQL.Resolvers do
     {:ok,
      case {segs, found} do
        {[], _} -> nil
-       {_, {:repo, id}} -> repo(id, dir)
-       {_, nil} -> dir |> D.resolve(Enum.join(segs, "/")) |> owner(dir)
+       {_, {:repo, id}} -> repo(id, dir, viewer)
+       {_, nil} -> dir |> D.resolve(Enum.join(segs, "/")) |> owner(dir, viewer)
      end}
   end
 
-  def all_repositories(_, args, _) do
+  def all_repositories(_, args, r) do
     dir = snapshot()
-    {:ok, connection(dir, Enum.map(D.repos(dir), & &1.id), args)}
+    {:ok, connection(dir, viewer(r), Enum.map(D.repos(dir), & &1.id), args)}
   end
 
   # ---- owners -------------------------------------------------------------
 
-  def owned_repositories(%{dir: dir, key: id}, args, _) do
-    {:ok, connection(dir, Enum.map(D.repos_owned_by(dir, id), & &1.id), args)}
+  def owned_repositories(%{dir: dir, key: id, viewer: viewer}, args, _) do
+    {:ok, connection(dir, viewer, Enum.map(D.repos_owned_by(dir, id), & &1.id), args)}
   end
 
-  def parent_organization(%{dir: dir, key: id}, _, _) do
-    {:ok, dir |> D.account(id) |> D.parent() |> owner(dir)}
+  def parent_organization(%{dir: dir, key: id, viewer: viewer}, _, _) do
+    {:ok, dir |> D.account(id) |> D.parent() |> owner(dir, viewer)}
   end
 
-  def sub_organizations(%{dir: dir, key: id}, args, _) do
-    nodes = dir |> D.child_orgs(id) |> Enum.sort_by(& &1.slug) |> Enum.map(&owner(&1.id, dir))
+  def sub_organizations(%{dir: dir, key: id, viewer: viewer}, args, _) do
+    nodes =
+      dir
+      |> D.child_orgs(id)
+      |> Enum.sort_by(& &1.slug)
+      |> Enum.map(&owner(&1.id, dir, viewer))
+
     {:ok, page(nodes, args)}
   end
 
   # ---- repos ------------------------------------------------------------
 
-  def repo_owner(%{dir: dir, key: id}, _, _) do
-    {:ok, dir |> D.repo(id) |> Map.fetch!(:owner) |> owner(dir)}
+  def repo_owner(%{dir: dir, key: id, viewer: viewer}, _, _) do
+    {:ok, dir |> D.repo(id) |> Map.fetch!(:owner) |> owner(dir, viewer)}
   end
 
   @doc "`main` if it exists, else `master`, else the first branch, else null."
@@ -152,17 +164,21 @@ defmodule Nugitea.GraphQL.Resolvers do
     dir
   end
 
-  defp repo(nil, _dir), do: nil
+  defp viewer(%{context: context}), do: context[:user_id]
+  defp viewer(_), do: nil
 
-  defp repo(id, dir) do
+  defp repo(nil, _dir, _viewer), do: nil
+
+  defp repo(id, dir, viewer) do
     path = D.repo_path(dir, id)
 
-    if path && Nugitea.Auth.allow_pull?(path) do
+    if path && Nugitea.Auth.allow?("upload-pack", viewer, path) do
       r = D.repo(dir, id)
 
       %{
         __type: :repository,
         dir: dir,
+        viewer: viewer,
         key: id,
         id: "R_#{id}",
         path: path,
@@ -175,9 +191,9 @@ defmodule Nugitea.GraphQL.Resolvers do
     end
   end
 
-  defp owner(nil, _dir), do: nil
+  defp owner(nil, _dir, _viewer), do: nil
 
-  defp owner(id, dir) do
+  defp owner(id, dir, viewer) do
     case D.account(dir, id) do
       nil ->
         nil
@@ -189,6 +205,7 @@ defmodule Nugitea.GraphQL.Resolvers do
         %{
           __type: type,
           dir: dir,
+          viewer: viewer,
           key: id,
           id: "#{prefix}_#{id}",
           login: path,
@@ -197,9 +214,9 @@ defmodule Nugitea.GraphQL.Resolvers do
     end
   end
 
-  defp connection(dir, ids, args) do
+  defp connection(dir, viewer, ids, args) do
     ids
-    |> Enum.map(&repo(&1, dir))
+    |> Enum.map(&repo(&1, dir, viewer))
     |> Enum.reject(&is_nil/1)
     |> Enum.sort_by(& &1.path)
     |> page(args)

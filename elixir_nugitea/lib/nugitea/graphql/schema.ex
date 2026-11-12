@@ -31,7 +31,8 @@ defmodule Nugitea.GraphQL.Schema do
         user: &R.user/3,
         organization: &R.organization/3,
         resource: &R.resource/3,
-        repositories: &R.all_repositories/3
+        repositories: &R.all_repositories/3,
+        viewer: &R.viewer/3
       },
       repository: %{
         owner: &R.repo_owner/3,

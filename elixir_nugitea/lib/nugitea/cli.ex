@@ -4,6 +4,7 @@ defmodule Nugitea.CLI do
 
       serve                                   run HTTP, SSH and the mirror scheduler
       user create LOGIN | user list
+      user set-password LOGIN                 set a new random password for web sign-in; prints it
       org create PATH [--visibility V]        PATH is `org` or `parent/child`
       org list
       org add-member ORG USER [--role member|owner|billing_manager]
@@ -203,6 +204,22 @@ defmodule Nugitea.CLI do
          user_id <- D.resolve(dir, user_login),
          token <- Nugitea.Accounts.Tokens.create_token(Accounts.state_dir(), user_id) do
       IO.puts(token)
+    end
+  end
+
+  # Generated, not given: a password on the command line would sit in shell
+  # history and the process list.
+  defp run(["user", "set-password", login], _opts) do
+    start()
+
+    with {:ok, dir} <- Accounts.Store.load(Accounts.state_dir()),
+         id when id != nil <- D.resolve(dir, login),
+         false <- D.org?(D.account(dir, id)) do
+      password = Accounts.Passwords.generate()
+      :ok = Accounts.Passwords.set(Accounts.state_dir(), id, password)
+      IO.puts(password)
+    else
+      _ -> {:error, "no user #{inspect(login)}"}
     end
   end
 

@@ -3,7 +3,10 @@ defmodule Nugitea.Router do
   The app tier's HTTP side:
 
     * `/api/v1`: the REST API, `Nugitea.API`;
-    * `/graphql`: for the web frontend;
+    * `/graphql`: for the web frontend, as the signed-in user;
+    * `/-/session`: web sign-in (`POST`, a login and password) and sign-out
+      (`DELETE`), with a session cookie (`Nugitea.Accounts.Sessions`).
+      Account names can't start with `-`, so `/-/` can't be a repo path;
     * git's smart-HTTP protocol for everything else, as Gitea's
       routers/web/repo/githttp.go serves it:
 
@@ -11,7 +14,8 @@ defmodule Nugitea.Router do
           POST /<owner path>/<repo>.git/git-upload-pack
           POST /<owner path>/<repo>.git/git-receive-pack
 
-  Every request is authenticated here first (`authenticate/2`). It runs no
+  Every request is authenticated here first (`authenticate/2`): an access
+  token in the Authorization header, or else the session cookie. It runs no
   git itself: it resolves the repo against the accounts directory, asks
   `Nugitea.Auth`, and hands the exchange to the storage tier.
   """
@@ -20,13 +24,20 @@ defmodule Nugitea.Router do
   import Plug.Conn
 
   alias Nugitea.Accounts
+  alias Nugitea.Accounts.Directory, as: D
+  alias Nugitea.Accounts.Passwords
+  alias Nugitea.Accounts.Sessions
   alias Nugitea.Accounts.Tokens
   alias Nugitea.Storage.Client
 
+  @cookie "nugitea_session"
+
   plug :cors
   plug :fetch_query_params
+  plug :fetch_cookies
   plug :parse_graphql_body
   plug :authenticate
+  plug :graphql_context
   plug :match
   plug :dispatch
 
@@ -35,6 +46,43 @@ defmodule Nugitea.Router do
   end
 
   forward "/api/v1", to: Nugitea.API
+
+  # Sign in: {"login": ..., "password": ...}. The same answer for a wrong
+  # password, an unknown login, an org or an account without a password.
+  post "/-/session" do
+    state = Accounts.state_dir()
+    {:ok, dir} = Accounts.Store.load(state)
+
+    with %{"login" => login, "password" => password}
+         when is_binary(login) and is_binary(password) <- conn.body_params,
+         user = user_account(dir, login),
+         true <- Passwords.verify(state, user, password) do
+      conn
+      |> put_resp_cookie(@cookie, Sessions.create(state, user),
+        http_only: true,
+        same_site: "Lax",
+        secure: https?(conn),
+        max_age: Sessions.ttl(),
+        path: "/"
+      )
+      |> json(200, %{login: D.path(dir, user)})
+    else
+      _ -> json(conn, 401, %{message: "wrong login or password"})
+    end
+  end
+
+  delete "/-/session" do
+    Sessions.delete(Accounts.state_dir(), conn.req_cookies[@cookie])
+
+    conn
+    |> delete_resp_cookie(@cookie,
+      http_only: true,
+      same_site: "Lax",
+      secure: https?(conn),
+      path: "/"
+    )
+    |> send_resp(204, "")
+  end
 
   forward "/graphql",
     to: Absinthe.Plug.GraphiQL,
@@ -154,8 +202,10 @@ defmodule Nugitea.Router do
   defp git_error(conn, status, msg), do: send_resp(conn, status, msg)
 
   # Who's calling, as Gitea accepts it: `Authorization: token T`, `Bearer T`,
-  # or basic auth with the token as the password. No header is anonymous
-  # (nil); a token we don't know is 401, with a challenge so git asks again.
+  # or basic auth with the token as the password; without that header, the
+  # web UI's session cookie. Neither is anonymous (nil), as is a session
+  # that has ended; a token we don't know is 401, with a challenge so git
+  # asks again.
   defp authenticate(conn, _opts) do
     with [header | _] <- get_req_header(conn, "authorization"),
          token when token != nil <- bearer_token(header),
@@ -163,7 +213,7 @@ defmodule Nugitea.Router do
       assign(conn, :user_id, user)
     else
       [] ->
-        assign(conn, :user_id, nil)
+        assign(conn, :user_id, Sessions.lookup(Accounts.state_dir(), conn.req_cookies[@cookie]))
 
       nil ->
         conn
@@ -189,6 +239,31 @@ defmodule Nugitea.Router do
 
   defp not_found, do: {:error, 404, "not found"}
 
+  # GraphQL resolvers see the caller as `context.user_id`.
+  defp graphql_context(%{request_path: "/graphql"} = conn, _opts),
+    do: Absinthe.Plug.put_options(conn, context: %{user_id: conn.assigns.user_id})
+
+  defp graphql_context(conn, _opts), do: conn
+
+  # A user account (not an org) by login, or nil.
+  defp user_account(dir, login) do
+    with id when id != nil <- D.resolve(dir, login),
+         %{} = account <- D.account(dir, id),
+         false <- D.org?(account),
+         do: id,
+         else: (_ -> nil)
+  end
+
+  # Behind nginx the hop to us is plain HTTP; it says what the browser used.
+  defp https?(conn),
+    do: conn.scheme == :https or get_req_header(conn, "x-forwarded-proto") == ["https"]
+
+  defp json(conn, status, body) do
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(status, Jason.encode!(body))
+  end
+
   # The Nuxt frontend calls /graphql from its own origin; like
   # rust_nugitea's CorsLayer::permissive, allow anything.
   defp cors(%{request_path: "/graphql"} = conn, _opts) do
@@ -204,17 +279,18 @@ defmodule Nugitea.Router do
   defp cors(conn, _opts), do: conn
 
   # Absinthe reads the query from parsed body params, and clients (the Nuxt
-  # frontend included) POST `{"query": ..., "variables": ...}` as JSON.
-  # Only for /graphql: the git routes stream their bodies, and the API
-  # routes read theirs themselves.
+  # frontend included) POST `{"query": ..., "variables": ...}` as JSON; the
+  # sign-in form posts JSON too. Only for those: the git routes stream their
+  # bodies, and the API routes read theirs themselves.
   @graphql_parsers Plug.Parsers.init(
                      parsers: [:json, Absinthe.Plug.Parser],
                      pass: ["*/*"],
                      json_decoder: Jason
                    )
 
-  defp parse_graphql_body(%{request_path: "/graphql"} = conn, _opts),
-    do: Plug.Parsers.call(conn, @graphql_parsers)
+  defp parse_graphql_body(%{request_path: path} = conn, _opts)
+       when path in ["/graphql", "/-/session"],
+       do: Plug.Parsers.call(conn, @graphql_parsers)
 
   defp parse_graphql_body(conn, _opts), do: conn
 end

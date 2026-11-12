@@ -51,6 +51,11 @@ type Query {
 	Every repo, across all owners (nugitea extension).
 	"""
 	repositories(first: Int): RepositoryConnection!
+	"""
+	The signed-in user, or null when anonymous (nugitea's is nullable:
+	GitHub has no anonymous access).
+	"""
+	viewer: User
 }
 
 type Ref {
