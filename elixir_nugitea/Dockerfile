@@ -4,7 +4,7 @@
 #
 # Admin commands run in the live node:
 #   bin/nugitea rpc 'Nugitea.CLI.main(["user", "create", "alice"])'
-FROM elixir:1.19 AS build
+FROM docker.io/library/elixir:1.19 AS build
 ENV MIX_ENV=prod
 WORKDIR /build
 RUN mix local.hex --force && mix local.rebar --force
@@ -17,7 +17,7 @@ RUN mix release
 
 # The same Debian as the build image: the release carries its own Erlang,
 # linked against this libc and OpenSSL.
-FROM debian:trixie-slim
+FROM docker.io/library/debian:trixie-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git openssh-client ca-certificates libssl3t64 libstdc++6 libncurses6 locales \
     && rm -rf /var/lib/apt/lists/* \
