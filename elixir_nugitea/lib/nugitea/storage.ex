@@ -15,6 +15,9 @@ defmodule Nugitea.Storage do
   alias Nugitea.Names
 
   @services %{"upload-pack" => "upload-pack", "receive-pack" => "receive-pack"}
+  # A new repo's default branch, as Gitea's [repository] DEFAULT_BRANCH.
+  @default_branch "main"
+
   @hooks ~w(pre-receive update post-receive)
   @archive_formats ~w(zip tar tar.gz tgz)
 
@@ -56,7 +59,9 @@ defmodule Nugitea.Storage do
         {:error, "repo #{inspect(path)} already exists"}
       else
         File.mkdir_p!(dir)
-        :ok = git(dir, ["init", "--bare", "--quiet", "."])
+        # On main, Gitea's DEFAULT_BRANCH, not whatever git's
+        # init.defaultBranch says (master, here).
+        :ok = git(dir, ["init", "--bare", "--quiet", "--initial-branch=#{@default_branch}", "."])
         install_hooks(dir)
       end
     end
@@ -128,7 +133,14 @@ defmodule Nugitea.Storage do
 
     # For receive-pack, we track refs before and after the operation
     is_receive_pack = cmd == "receive-pack"
-    before_refs = if is_receive_pack, do: get_refs(dir), else: nil
+
+    before_refs =
+      if is_receive_pack do
+        case get_refs(dir) do
+          {:ok, refs} -> refs
+          _ -> nil
+        end
+      end
 
     args = if opts[:stateless], do: [cmd, "--stateless-rpc", dir], else: [cmd, dir]
 
@@ -138,7 +150,8 @@ defmodule Nugitea.Storage do
       :exec.run([git | args], [:stdin, :stdout, :monitor, {:env, protocol_env(opts[:protocol])}])
 
     inflater = opts[:gzip] && inflater()
-    loop(reply_to, ref, os_pid, inflater, is_receive_pack, before_refs, path)
+    # The repo's directory from here on: git needs it, not the repo's path.
+    loop(reply_to, ref, os_pid, inflater, is_receive_pack, before_refs, dir)
   end
 
   defp loop(reply_to, ref, os_pid, inflater, is_receive_pack, before_refs, path) do
@@ -178,6 +191,8 @@ defmodule Nugitea.Storage do
         loop(reply_to, ref, os_pid, inflater, is_receive_pack, before_refs, path)
 
       {:DOWN, ^os_pid, :process, _, reason} ->
+        if is_receive_pack && before_refs, do: adopt_default_branch(path, before_refs)
+
         # Check if this was a receive-pack operation and track changes
         if is_receive_pack && before_refs do
           case get_refs(path) do
@@ -197,6 +212,22 @@ defmodule Nugitea.Storage do
         send(reply_to, {ref, :exit, exit_status(reason)})
     end
   end
+
+  # Gitea's rule (services/repository/push.go): the first push to an empty
+  # repo makes its branch the default, if the default branch (main) wasn't
+  # pushed. `dir` is the repo's directory.
+  defp adopt_default_branch(dir, []) do
+    with {:error, _} <- capture(dir, ["rev-parse", "--verify", "--quiet", "HEAD"]),
+         {:ok, out} <- capture(dir, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]),
+         [first | _] = branches <- String.split(out, "\n", trim: true) do
+      branch = if @default_branch in branches, do: @default_branch, else: first
+      git(dir, ["symbolic-ref", "HEAD", "refs/heads/" <> branch])
+    end
+
+    :ok
+  end
+
+  defp adopt_default_branch(_dir, _before_refs), do: :ok
 
   defp exit_status(:normal), do: 0
   defp exit_status({:exit_status, status}), do: :exec.status(status) |> elem(1)

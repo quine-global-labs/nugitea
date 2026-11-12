@@ -67,7 +67,7 @@ defmodule Nugitea.StorageTest do
     File.mkdir_p!(tmp_git_dir)
 
     # Initialize a git repo in the temp directory and add some content
-    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["init", "--quiet", "--initial-branch=main", "."], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
 
@@ -134,7 +134,7 @@ defmodule Nugitea.StorageTest do
     tmp_git_dir = Path.join(root, "tmp_git")
     File.mkdir_p!(tmp_git_dir)
 
-    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["init", "--quiet", "--initial-branch=main", "."], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
 
@@ -174,7 +174,7 @@ defmodule Nugitea.StorageTest do
     tmp_git_dir = Path.join(root, "tmp_git")
     File.mkdir_p!(tmp_git_dir)
 
-    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["init", "--quiet", "--initial-branch=main", "."], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
 
@@ -207,7 +207,7 @@ defmodule Nugitea.StorageTest do
     tmp_git_dir = Path.join(root, "tmp_git")
     File.mkdir_p!(tmp_git_dir)
 
-    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["init", "--quiet", "--initial-branch=main", "."], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
 
@@ -268,7 +268,7 @@ defmodule Nugitea.StorageTest do
     tmp_git_dir = Path.join(root, "tmp_git")
     File.mkdir_p!(tmp_git_dir)
 
-    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["init", "--quiet", "--initial-branch=main", "."], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
 
@@ -310,7 +310,7 @@ defmodule Nugitea.StorageTest do
     tmp_git_dir = Path.join(root, "tmp_git")
     File.mkdir_p!(tmp_git_dir)
 
-    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["init", "--quiet", "--initial-branch=main", "."], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
 
@@ -370,7 +370,7 @@ defmodule Nugitea.StorageTest do
     tmp_git_dir = Path.join(root, "tmp_git")
     File.mkdir_p!(tmp_git_dir)
 
-    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["init", "--quiet", "--initial-branch=main", "."], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
 
@@ -400,7 +400,7 @@ defmodule Nugitea.StorageTest do
     tmp_git_dir = Path.join(root, "tmp_git")
     File.mkdir_p!(tmp_git_dir)
 
-    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["init", "--quiet", "--initial-branch=main", "."], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
 
@@ -442,7 +442,7 @@ defmodule Nugitea.StorageTest do
     tmp_git_dir = Path.join(root, "tmp_git")
     File.mkdir_p!(tmp_git_dir)
 
-    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["init", "--quiet", "--initial-branch=main", "."], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
 
@@ -474,7 +474,7 @@ defmodule Nugitea.StorageTest do
     tmp_git_dir = Path.join(root, "tmp_git")
     File.mkdir_p!(tmp_git_dir)
 
-    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["init", "--quiet", "--initial-branch=main", "."], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
 
@@ -530,7 +530,7 @@ defmodule Nugitea.StorageTest do
     tmp_git_dir = Path.join(root, "tmp_git")
     File.mkdir_p!(tmp_git_dir)
 
-    System.cmd("git", ["init", "--quiet", "."], cd: tmp_git_dir)
+    System.cmd("git", ["init", "--quiet", "--initial-branch=main", "."], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.email", "test@example.com"], cd: tmp_git_dir)
     System.cmd("git", ["config", "user.name", "Test User"], cd: tmp_git_dir)
 
