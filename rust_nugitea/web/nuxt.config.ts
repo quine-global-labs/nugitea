@@ -4,13 +4,16 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   css: ['~/assets/main.css'],
   runtimeConfig: {
-    // Server-only: used for SSR-time fetches, which happen container-to-
-    // container in Docker Compose and so need the internal service name.
+    // Server-only: the app tier, for SSR-time GraphQL and for the proxy
+    // routes in server/routes/ (/graphql, /-/session). Container-to-
+    // container in Docker Compose, so the internal service name.
+    appUrl: 'http://127.0.0.1:3080',
     graphqlUrl: 'http://127.0.0.1:3080/graphql',
     public: {
-      // Client-visible: used for post-hydration fetches from the
-      // browser, which need a URL the browser can actually reach.
-      graphqlUrl: 'http://localhost:3080/graphql'
+      // Client-visible: where the browser sends GraphQL. Same-origin by
+      // default, so the session cookie goes with it: in production nginx
+      // sends /graphql to the app tier, elsewhere this server proxies it.
+      graphqlUrl: '/graphql'
     }
   }
 })

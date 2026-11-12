@@ -18,9 +18,14 @@ interface GraphqlResponse<T> {
 
 export async function graphqlRequest<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
   const url = useGraphqlUrl()
+  // During SSR, the browser's cookie (its sign-in session) goes along, so
+  // the page renders as the signed-in user. In the browser, the fetch is
+  // same-origin and sends it anyway.
+  const headers = import.meta.server ? useRequestHeaders(['cookie']) : undefined
   const res = await $fetch<GraphqlResponse<T>>(url, {
     method: 'POST',
-    body: { query, variables }
+    body: { query, variables },
+    headers
   })
   if (res.errors?.length) {
     throw new Error(res.errors.map((e) => e.message).join('; '))

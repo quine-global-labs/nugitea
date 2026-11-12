@@ -83,7 +83,7 @@ step "Starting the web frontend on $web_url"
 (
   cd "$root/rust_nugitea/web"
   HOST=127.0.0.1 PORT=$web_port \
-    NUXT_GRAPHQL_URL="$api_url/graphql" NUXT_PUBLIC_GRAPHQL_URL="$api_url/graphql" \
+    NUXT_APP_URL="$api_url" NUXT_GRAPHQL_URL="$api_url/graphql" \
     exec node .output/server/index.mjs
 ) >"$work/web.log" 2>&1 &
 pids+=($!)
