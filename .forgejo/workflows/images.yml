@@ -32,10 +32,10 @@ jobs:
   image:
     runs-on: runner-arm64-linux
     steps:
-      - uses: https://forge.in.quineglobal.com/quine-global-labs/mirror-actions-checkout@v4
+      - uses: https://forge.in.quineglobal.com/quine-global/mirror-actions-checkout@v4
       - uses: https://forge.in.quineglobal.com/quine-global/site-image@v1
         with:
-          image: forge.in.quineglobal.com/quine-global-labs/nugitea
+          image: forge.in.quineglobal.com/quine-global/nugitea
           context: .
           containerfile: Containerfile
           infra-file: nixos/arion-nugitea/arion-compose.nix
