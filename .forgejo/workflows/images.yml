@@ -1,10 +1,12 @@
-# On every push to main that touches them: build nugitea's two images,
-# push them to the forge's registry, and open petersweb-infra PRs that pin
-# them (quine-global/site-image). Merging a PR deploys it to
-# nugitea.in.quineglobal.com (petersweb-infra, nixos/arion-nugitea).
-#
-#   nugitea      elixir_nugitea, the server (HTTP, SSH, both tiers)
-#   nugitea-web  rust_nugitea/web, the Nuxt frontend
+# On every push to main that touches them: build nugitea's image (the
+# Containerfile: elixir_nugitea, the server, and rust_nugitea/web, the Nuxt
+# frontend), push it to the forge's registry, and open a petersweb-infra PR
+# that pins it (quine-global/site-image). Merging the PR deploys it to
+# nugitea.in.quineglobal.com (petersweb-infra, nixos/arion-nugitea), where
+# it runs as two containers. One image, so the frontend is never deployed
+# against a server from another commit: with an image each, each had its
+# own PR, and merging one alone left the web UI calling GraphQL fields the
+# running server didn't have (2026-11-12).
 #
 # Runs on runner-arm64-linux (host mode, podman), arm64 like the forge VM
 # nugitea runs on. The forge VM's own ubuntu-latest runner doesn't take this
@@ -21,28 +23,23 @@ on:
     paths:
       - 'elixir_nugitea/**'
       - 'rust_nugitea/web/**'
+      - 'Containerfile'
+      - '.dockerignore'
       - '.forgejo/workflows/images.yml'
   workflow_dispatch:
 
 jobs:
   image:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: nugitea
-            context: elixir_nugitea
-          - name: nugitea-web
-            context: rust_nugitea/web
     runs-on: runner-arm64-linux
     steps:
       - uses: https://forge.in.quineglobal.com/quine-global-labs/mirror-actions-checkout@v4
       - uses: https://forge.in.quineglobal.com/quine-global/site-image@v1
         with:
-          image: forge.in.quineglobal.com/quine-global-labs/${{ matrix.name }}
-          context: ${{ matrix.context }}
+          image: forge.in.quineglobal.com/quine-global-labs/nugitea
+          context: .
+          containerfile: Containerfile
           infra-file: nixos/arion-nugitea/arion-compose.nix
-          name: ${{ matrix.name }}
+          name: nugitea
           platform: linux/arm64
           registry-username: ${{ secrets.REGISTRY_USERNAME || vars.REGISTRY_USER || github.actor }}
           registry-password: ${{ secrets.REGISTRY_PASSWORD || secrets.REGISTRY_TOKEN }}

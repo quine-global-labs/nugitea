@@ -1,0 +1,19 @@
+# The Containerfile needs only these two; the rest (Go, Rust, e2e) stays out
+# of the build context.
+*
+!elixir_nugitea
+!rust_nugitea/web
+elixir_nugitea/_build
+elixir_nugitea/deps
+elixir_nugitea/data
+elixir_nugitea/cover
+elixir_nugitea/doc
+elixir_nugitea/tmp
+elixir_nugitea/test
+rust_nugitea/web/node_modules
+rust_nugitea/web/.nuxt
+rust_nugitea/web/.output
+rust_nugitea/web/.data
+rust_nugitea/web/.nitro
+rust_nugitea/web/.cache
+rust_nugitea/web/dist
